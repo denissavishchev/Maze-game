@@ -1,8 +1,6 @@
 import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Offset;
-
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../l10n/strings.dart';
