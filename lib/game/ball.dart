@@ -1,0 +1,148 @@
+import 'dart:math';
+
+/// The material the ball is made of. Each one trades something for something
+/// else; the numbers are multipliers on the standard (wooden) ball.
+enum BallKind { wood, steel, rubber, glass, stone }
+
+class BallStats {
+  const BallStats({
+    this.accel = 1,
+    this.maxSpeed = 1,
+    this.damping = 1,
+    this.bounce = 0.25,
+    this.radius = 1,
+    this.noise = 1,
+    this.windResist = 0,
+    this.bogResist = 0,
+    this.breaksAt,
+  });
+
+  /// How quickly a tilt gets it rolling.
+  final double accel;
+
+  /// Top speed.
+  final double maxSpeed;
+
+  /// Rolling friction: lower means it keeps rolling longer.
+  final double damping;
+
+  /// Springiness against walls (0 = dead stop, 1 = full rebound).
+  final double bounce;
+
+  /// Size.
+  final double radius;
+
+  /// How loud it is at a given speed.
+  final double noise;
+
+  /// Share of a gust of wind it shrugs off (negative: blown harder).
+  final double windResist;
+
+  /// Share of a bog's pull and suction it resists.
+  final double bogResist;
+
+  /// A hit at least this hard destroys it (null: unbreakable).
+  final double? breaksAt;
+}
+
+BallStats statsOf(BallKind kind) => switch (kind) {
+      BallKind.wood => const BallStats(),
+      BallKind.steel => const BallStats(
+          accel: 0.85,
+          maxSpeed: 1.15,
+          damping: 0.7,
+          bounce: 0.1,
+          noise: 1.4,
+          windResist: 0.25,
+        ),
+      BallKind.rubber => const BallStats(
+          accel: 1.1,
+          bounce: 0.9,
+          noise: 0.55,
+          windResist: -0.25,
+        ),
+      BallKind.glass => const BallStats(
+          accel: 1.3,
+          maxSpeed: 1.1,
+          bounce: 0.35,
+          radius: 0.8,
+          breaksAt: 5.0,
+        ),
+      BallKind.stone => const BallStats(
+          accel: 0.8,
+          maxSpeed: 0.85,
+          damping: 1.2,
+          bounce: 0.05,
+          radius: 1.15,
+          noise: 0.8,
+          windResist: 0.6,
+          bogResist: 0.5,
+        ),
+    };
+
+// ---- Rolling -------------------------------------------------------------
+//
+// The ball's orientation is a 3x3 rotation matrix (row-major, 9 numbers) with
+// the viewer looking down the z axis. Rolling turns it about the axis
+// perpendicular to the direction of travel, so patterns on the surface slide
+// along exactly as fast as the ball moves.
+
+typedef Rot = List<double>;
+
+Rot identityRot() => <double>[1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+Rot _mul(Rot a, Rot b) => <double>[
+      for (var i = 0; i < 3; i++)
+        for (var j = 0; j < 3; j++)
+          a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j],
+    ];
+
+/// [r] turned by [angle] radians about the axis ([ax], [ay], [az]).
+Rot turnRot(Rot r, double ax, double ay, double az, double angle) {
+  final len = _len(ax, ay, az);
+  if (len < 1e-9 || angle == 0) return r;
+  final x = ax / len, y = ay / len, z = az / len;
+  final c = cos(angle), s = sin(angle), t = 1 - c;
+  return _mul(<double>[
+    t * x * x + c, t * x * y - s * z, t * x * z + s * y, //
+    t * x * y + s * z, t * y * y + c, t * y * z - s * x, //
+    t * x * z - s * y, t * y * z + s * x, t * z * z + c,
+  ], r);
+}
+
+/// Rolls the ball over the ground by [dx], [dy] (a displacement in maze
+/// units) given its radius.
+Rot rollRot(Rot r, double dx, double dy, double radius) {
+  final dist = _len(dx, dy, 0);
+  if (dist < 1e-9) return r;
+  // Surface velocity at the top must point along the motion: the axis is the
+  // direction of travel turned a quarter turn.
+  return turnRot(r, -dy / dist, dx / dist, 0, dist / radius);
+}
+
+/// Pulls a rotation matrix back to exactly orthonormal after many small
+/// turns, so the ball never slowly shears.
+Rot orthonormalize(Rot r) {
+  var x = [r[0], r[1], r[2]];
+  var y = [r[3], r[4], r[5]];
+  double dot(List<double> a, List<double> b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  List<double> norm(List<double> a) {
+    final l = _len(a[0], a[1], a[2]);
+    return [a[0] / l, a[1] / l, a[2] / l];
+  }
+
+  x = norm(x);
+  final d = dot(y, x);
+  y = norm([y[0] - d * x[0], y[1] - d * x[1], y[2] - d * x[2]]);
+  final z = [
+    x[1] * y[2] - x[2] * y[1],
+    x[2] * y[0] - x[0] * y[2],
+    x[0] * y[1] - x[1] * y[0],
+  ];
+  return <double>[...x, ...y, ...z];
+}
+
+/// A pleasant resting pose that shows the markings of every material.
+Rot restingRot() => turnRot(turnRot(identityRot(), 1, 0, 0, 0.5), 0, 1, 0, 0.6);
+
+double _len(double a, double b, double c) => sqrt(a * a + b * b + c * c);
