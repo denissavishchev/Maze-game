@@ -1,17 +1,37 @@
-# maze
+# Maze
 
-A new Flutter project.
+A tilt-controlled ball maze game built with Flutter. Tilt your phone to roll the ball through a circular maze to the star in the centre — press all the buttons to open the gates, dodge the dangers of each world and beat your best time.
 
-## Getting Started
+## Worlds
 
-This project is a starting point for a Flutter application.
+| World | Twist |
+|-------|-------|
+| 🌲 Forest | A sleeping wolf wakes up from the noise of your rolling ball. Stand still and it loses interest. |
+| 🐸 Mud | Bogs pull you in and spikes pop up in the corridor ahead. |
+| 🏔️ Mountains | Boulders fall where you are heading; on the biggest sizes, gusts of wind push the ball. |
+| 🕳️ Underground | Pitch dark — you only see the area right around the ball. |
+| 🏙️ City | Drones sleep until noise wakes them. If they spot you, you go back to the start. |
 
-A few resources to get you started if this is your first Flutter project:
+Each world has its own bonus (put wolves to sleep, disable traps / boulders / drones, more light), five ball materials (wood, steel, rubber, glass, stone — each with its own strengths) and five maze sizes from Small to Giant.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Screenshots
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| | | |
+|---|---|---|
+| ![Home](screenshots/01-home.png) | ![World & ball select](screenshots/02-select.png) | ![Forest start](screenshots/03-forest-start.png) |
+| Home screen | World, ball and maze size selection | Forest — the maze at the start |
+| ![Forest gameplay](screenshots/04-forest-playing.png) | ![Mountains select](screenshots/05-select-mountains.png) | ![Mud](screenshots/06-mud.png) |
+| Forest — the wolf wakes up | Mountains setup with the steel ball | Mud — bogs and spike traps |
+| ![Mountains](screenshots/07-mountains.png) | ![Underground select](screenshots/08-select-underground.png) | ![Underground](screenshots/09-underground.png) |
+| Mountains — snowy maze with gates | Underground, Huge size | Underground — only the ball's light is visible |
+| ![City](screenshots/10-city.png) | | |
+| City — patrolling drones | | |
+
+## Run
+
+```bash
+flutter pub get
+flutter run
+```
+
+The game is controlled only by the accelerometer, so run it on a real device (or an emulator with simulated sensors).
