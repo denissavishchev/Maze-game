@@ -1,11 +1,14 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/animation.dart' show Curves;
 import 'package:flutter/painting.dart' show Offset;
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../l10n/strings.dart';
 import 'ball.dart';
+import 'maze.dart';
 import 'polar_maze.dart';
+import 'rect_maze.dart';
 import 'records.dart';
 import 'world.dart';
 
@@ -64,6 +67,49 @@ class Hazard {
   bool get armed => age >= armAt;
 }
 
+/// A laser across a corridor, drawn from wall to wall at [center], with
+/// [along] the unit direction of the corridor. It pulses: dark, then a short
+/// warning, then the beam, over and over, [phase] seconds out of step with the
+/// others.
+class Laser {
+  const Laser(this.center, this.along, this.phase);
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+}
+
+/// An airlock door across a corridor: open, a warning, then shut for a while.
+class Airlock {
+  Airlock(this.center, this.along, this.phase)
+      : seg = Seg(
+          center - Offset(-along.dy, along.dx) * 0.5,
+          center + Offset(-along.dy, along.dx) * 0.5,
+          -1,
+        );
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+
+  /// The closed door as a wall piece.
+  final Seg seg;
+}
+
+/// A security camera on the ceiling of a corridor cell. Its view swings back
+/// and forth around [base] (radians), [phase] seconds out of step with the
+/// others. Kept in its view for a moment, the ball is caught.
+class SecurityCamera {
+  SecurityCamera(this.pos, this.base, this.phase);
+
+  final Offset pos;
+  final double base;
+  final double phase;
+
+  /// How long the ball has been in view (0 when it is not).
+  double alert = 0;
+}
+
 class MudPatch {
   const MudPatch(this.pos, this.radius);
 
@@ -81,10 +127,54 @@ class Burst {
 }
 
 class GameController extends ChangeNotifier {
-  GameController(this.config, {this.hazardsEnabled = true, int? seed})
+  /// With [endless] the game never ends by winning: reaching the centre moves
+  /// on to the next world (see [endlessConfig]) until the player loses.
+  GameController(this.config,
+      {this.hazardsEnabled = true, this.endless = false, int? seed})
       : _rnd = seed == null ? Random() : Random(seed) {
+    if (endless) config = endlessConfig(0, config.ball, world: _pickWorld());
     newMaze();
   }
+
+  /// Endless mode: the level for [stage] in [world] (the worlds in turn when
+  /// none is given). The first five levels have no bonuses, the next five one
+  /// bonus each, and so on.
+  static GameConfig endlessConfig(int stage, BallKind ball, {WorldKind? world}) =>
+      GameConfig(
+        world ?? WorldKind.values[stage % WorldKind.values.length],
+        GameConfig.minLevel,
+        ball: ball,
+        bonuses: (stage ~/ levelsPerBonusRound).isOdd ? 1 : 0,
+      );
+
+  /// Endless mode: this many levels without bonuses, then this many with one
+  /// each, and so on.
+  static const int levelsPerBonusRound = 5;
+
+  /// The last worlds played in endless mode; the next one is never among them.
+  static const int worldsNotRepeated = 3;
+  final List<WorldKind> _recent = [];
+
+  /// A random world, but none of the last [worldsNotRepeated] played.
+  WorldKind _pickWorld() {
+    final options = [
+      for (final w in WorldKind.values)
+        if (!_recent.contains(w)) w,
+    ];
+    final world = options[_rnd.nextInt(options.length)];
+    _recent.add(world);
+    if (_recent.length > worldsNotRepeated) _recent.removeAt(0);
+    return world;
+  }
+
+  /// Endless mode: the rectangular maze is as many cells across and down as
+  /// fit on the screen (see [fitGrid]).
+  static const List<int> endlessColsChoices = [6, 7, 8];
+  static const int minEndlessRows = 8;
+  static const int maxEndlessRows = 20;
+
+  /// Endless mode: how long the screen scrolls to the next maze.
+  static const double scrollSeconds = 0.9;
 
   static const double baseBallRadius = 0.26;
   static const double _accel = 16;
@@ -114,9 +204,8 @@ class GameController extends ChangeNotifier {
   /// How close the ball must come to a cell to uncover it on the minimap.
   static const double exploreRadius = 1.9;
 
-  /// How far the entrance trail reaches beyond the outer wall; the ball
-  /// cannot roll off its end.
-  static const double _trailLength = PolarMaze.trailLength;
+  /// A ball this close to a wall (beyond touching it) counts as up against it.
+  static const double touchMargin = 0.03;
 
   /// Traps never appear closer to the ball than this.
   static const double minSpikeDistance = 3.5;
@@ -141,6 +230,27 @@ class GameController extends ChangeNotifier {
   static const double windWarning = 1.5;
   static const double windDuration = 2.5;
 
+  /// Spaceship lasers: how long the beam burns and how long it warns first.
+  static const double laserBeam = 1.0;
+  static const double laserWarning = 0.9;
+
+  /// Spaceship airlocks: a full cycle, how long a door stays open, and how
+  /// long it blinks before it shuts (the rest of the cycle it is shut).
+  static const double airlockCycle = 6.0;
+  static const double airlockOpen = 3.4;
+  static const double airlockWarning = 0.9;
+
+  /// Security cameras: how far they see, how wide their view is (half-angle),
+  /// how far it swings to either side, and how long the ball must stay in view
+  /// before it is caught.
+  static const double cameraRange = 3.2;
+  static const double cameraHalfAngle = 0.4;
+  static const double cameraSweep = 1.0;
+  static const double cameraReaction = 0.4;
+
+  /// Spaceship: the new direction of gravity is announced this long before.
+  static const double gravityWarning = 1.2;
+
   /// Uses per bonus pickup and how long one use lasts.
   static const int usesPerBonus = 3;
   static const double bonusDuration = 10;
@@ -153,7 +263,24 @@ class GameController extends ChangeNotifier {
   /// A drone must keep the ball in view this long before it catches it.
   static const double droneReaction = 0.45;
 
-  final GameConfig config;
+  /// Endless mode: size of the maze, set to what the screen has room for.
+  int endlessCols = 7;
+  int endlessRows = 11;
+  int? _nextStartCol;
+
+  /// Endless mode: while the screen scrolls from one maze to the next,
+  /// [prevMaze] is the maze being left and [transition] runs from 0 to 1.
+  Maze? prevMaze;
+  double transition = 1;
+  bool get scrolling => transition < 1;
+
+  /// The level being played; in endless mode it changes with every stage.
+  GameConfig config;
+
+  final bool endless;
+
+  /// Endless mode: how many mazes have been solved in this run.
+  int stage = 0;
 
   /// What the chosen ball is made of, and its radius.
   late final BallStats ball = statsOf(config.ball);
@@ -164,7 +291,7 @@ class GameController extends ChangeNotifier {
 
   final Random _rnd;
 
-  late PolarMaze maze;
+  late Maze maze;
   Offset pos = Offset.zero;
   Offset vel = Offset.zero;
   Offset camera = Offset.zero;
@@ -184,6 +311,9 @@ class GameController extends ChangeNotifier {
   List<Creature> creatures = [];
   List<Hazard> hazards = [];
   List<MudPatch> mud = [];
+
+  /// Graveyard: patches of cold fog (they slow the ball, nothing worse).
+  List<MudPatch> fog = [];
   List<Burst> bursts = [];
 
   /// Gate to point the player at after a button was pressed (-1 = none).
@@ -213,6 +343,19 @@ class GameController extends ChangeNotifier {
   double windLeft = 0;
   double _windTimer = 7;
 
+  /// Spaceship: the lasers and airlock doors, and the clock they run on.
+  List<Laser> lasers = [];
+  List<Airlock> airlocks = [];
+  List<SecurityCamera> cameras = [];
+  double _spaceClock = 0;
+
+  /// Spaceship: where gravity pulls now, where it will pull next and how long
+  /// until it changes. While [gravityWarnLeft] runs, the change is announced.
+  Offset gravityDir = const Offset(0, 1);
+  Offset gravityNext = const Offset(0, 1);
+  double gravityWarnLeft = 0;
+  double _gravityTimer = 0;
+
   /// How the ball is turned: it rolls as it moves.
   Rot ballRot = restingRot();
   int _rollSteps = 0;
@@ -241,6 +384,9 @@ class GameController extends ChangeNotifier {
   Map<String, Object> noticeArgs = const {};
   double noticeLeft = 0;
 
+  /// Whether the ball was up against a wall during the last step.
+  bool _touchingWall = false;
+
   double _spawnTimer = 1.5;
   double _impact = 0;
   double _soundCooldown = 0;
@@ -254,11 +400,19 @@ class GameController extends ChangeNotifier {
   bool get lost => status == GameStatus.lost;
 
   void newMaze() {
-    maze = PolarMaze.generate(
-      rings: config.rings,
-      gates: config.buttonCount,
-      random: _rnd,
-    );
+    maze = endless
+        ? RectMaze.generate(
+            cols: endlessCols,
+            rows: endlessRows,
+            gates: config.buttonCount,
+            random: _rnd,
+            startCol: _nextStartCol,
+          )
+        : PolarMaze.generate(
+            rings: config.rings,
+            gates: config.buttonCount,
+            random: _rnd,
+          );
     _centers = [for (var c = 0; c < maze.cellCount; c++) maze.cellCenter(c)];
     final taken = {maze.start, maze.goal, ...maze.buttonCells};
     bonusCells = ([
@@ -267,29 +421,100 @@ class GameController extends ChangeNotifier {
     ]..shuffle(_rnd))
         .take(config.bonusCount)
         .toList();
+    fog = [];
+    if (config.world == WorldKind.graveyard) {
+      final special = {maze.start, maze.goal, ...maze.buttonCells};
+      final cells = [
+        for (var c = 1; c < maze.cellCount; c++)
+          if (!special.contains(c)) c,
+      ]..shuffle(_rnd);
+      for (final c in cells.take(config.fogCount)) {
+        fog.add(MudPatch(maze.cellCenter(c), 0.75 + _rnd.nextDouble() * 0.3));
+      }
+    }
     mud = [];
     if (config.world == WorldKind.mud) {
       final special = {maze.start, maze.goal, ...maze.buttonCells};
+      // Bogs stay clear of the walls: the corridor is about 0.55 wide.
       Offset jitter() =>
-          Offset(_rnd.nextDouble() - 0.5, _rnd.nextDouble() - 0.5) * 0.3;
+          Offset(_rnd.nextDouble() - 0.5, _rnd.nextDouble() - 0.5) * 0.06;
       // Bogs scattered around, plus some right on the way to the centre that
       // fill the whole corridor and cannot be avoided.
       final cells = [
         for (var c = 1; c < maze.cellCount; c++)
           if (!special.contains(c)) c,
       ]..shuffle(_rnd);
-      for (final c in cells.take(maze.rings)) {
-        mud.add(MudPatch(maze.cellCenter(c) + jitter(), 0.38 + _rnd.nextDouble() * 0.12));
+      for (final c in cells.take(maze.scatterCount)) {
+        mud.add(MudPatch(maze.cellCenter(c) + jitter(), 0.18 + _rnd.nextDouble() * 0.06));
       }
       final onRoute = [
         for (final c in maze.solution)
           if (!special.contains(c)) c,
       ]..shuffle(_rnd);
       for (final c in onRoute.take(config.routeBogs)) {
-        mud.add(MudPatch(maze.cellCenter(c), 0.5));
+        mud.add(MudPatch(maze.cellCenter(c), 0.27));
       }
     }
+    lasers = [];
+    airlocks = [];
+    cameras = [];
+    if (config.world == WorldKind.space) _placeSpaceHazards();
     restart();
+  }
+
+  /// Spaceship: lasers, airlocks and security cameras along the way to the
+  /// exit, spread out and away from the start, on the straightest stretches of
+  /// corridor.
+  void _placeSpaceHazards() {
+    final route = maze.solution;
+    if (route.length < 5) return;
+    final special = {maze.start, maze.goal, ...maze.buttonCells};
+    // 0 laser, 1 airlock, 2 security camera.
+    final kinds = [
+      for (var i = 0; i < config.laserCount; i++) 0,
+      for (var i = 0; i < config.airlockCount; i++) 1,
+      for (var i = 0; i < config.cameraCount; i++) 2,
+    ]..shuffle(_rnd);
+    final used = <int>{};
+    // How far from a straight stretch of corridor cell i of the route is:
+    // 0 when it continues in line, more at a bend.
+    double bend(int i) {
+      final a = maze.cellCenter(route[i]) - maze.cellCenter(route[i - 1]);
+      final b = maze.cellCenter(route[i + 1]) - maze.cellCenter(route[i]);
+      return (a.dx * b.dy - a.dy * b.dx).abs() / (a.distance * b.distance);
+    }
+
+    for (var k = 0; k < kinds.length; k++) {
+      final want = (route.length * (k + 1) / (kinds.length + 1)).round();
+      // The straightest free cell close to where it is wanted.
+      int? at;
+      var best = double.infinity;
+      for (var i = want - 6; i <= want + 6; i++) {
+        if (i < 2 || i > route.length - 2) continue;
+        if (used.contains(route[i]) || special.contains(route[i])) continue;
+        final score = bend(i) + 0.03 * (i - want).abs();
+        if (score < best) {
+          best = score;
+          at = i;
+        }
+      }
+      if (at == null) continue;
+      final cell = route[at];
+      used.add(cell);
+      final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
+      final along = dir / dir.distance;
+      final center = maze.cellCenter(cell);
+      final phase = _rnd.nextDouble() * config.laserPeriod;
+      if (kinds[k] == 2) {
+        // Looks along the corridor, one way or the other, and sweeps across.
+        final look = along.direction + (_rnd.nextBool() ? 0 : pi);
+        cameras.add(SecurityCamera(center, look, _rnd.nextDouble() * config.cameraPeriod));
+      } else if (kinds[k] == 0) {
+        lasers.add(Laser(center, along, phase));
+      } else {
+        airlocks.add(Airlock(center, along, _rnd.nextDouble() * airlockCycle));
+      }
+    }
   }
 
   /// Same maze, everything back to its starting state.
@@ -307,6 +532,8 @@ class GameController extends ChangeNotifier {
     elapsed = 0;
     hazards = [];
     bursts = [];
+    prevMaze = null;
+    transition = 1;
     hintGate = -1;
     notice = '';
     noticeLeft = 0;
@@ -322,6 +549,11 @@ class GameController extends ChangeNotifier {
     windWarnLeft = 0;
     windLeft = 0;
     _windTimer = 7;
+    _spaceClock = 0;
+    for (final cam in cameras) {
+      cam.alert = 0;
+    }
+    _resetGravity();
     bonusTaken = List<bool>.filled(bonusCells.length, false);
     bonusCharges = 0;
     bonusLeft = 0;
@@ -334,8 +566,15 @@ class GameController extends ChangeNotifier {
 
   // ---- creatures --------------------------------------------------------
 
+  /// Wolves and ghosts: asleep until a noise wakes them, and they lie down
+  /// again when the ball stands still.
+  bool get _wolfLike =>
+      config.world == WorldKind.forest || config.world == WorldKind.graveyard;
+
   List<Creature> _spawnCreatures() {
-    if (config.world != WorldKind.forest && config.world != WorldKind.city) {
+    if (config.world != WorldKind.forest &&
+        config.world != WorldKind.city &&
+        config.world != WorldKind.graveyard) {
       return [];
     }
     final special = {maze.start, maze.goal, ...maze.buttonCells};
@@ -362,6 +601,10 @@ class GameController extends ChangeNotifier {
   void update(double dt, Offset tilt) {
     if (status != GameStatus.playing) return;
     dt = min(dt, 1 / 30);
+    if (scrolling) {
+      _scroll(dt);
+      return;
+    }
     if (!started && tilt.distance > startTilt) started = true;
     if (started) elapsed += dt;
 
@@ -370,6 +613,9 @@ class GameController extends ChangeNotifier {
         hazardsEnabled &&
         started) {
       _updateWind(dt);
+    }
+    if (config.world == WorldKind.space && hazardsEnabled && started) {
+      _updateGravity(dt);
     }
     final before = pos;
     _physics(dt, tilt);
@@ -406,11 +652,88 @@ class GameController extends ChangeNotifier {
     }
     camera = Offset.lerp(camera, pos, min(1, dt * 6))!;
 
-    if (status == GameStatus.playing && pos.distance < 0.55) {
-      status = GameStatus.won;
-      _saveRecord();
+    if (status == GameStatus.playing && maze.atGoal(pos)) {
+      if (endless) {
+        _nextStage();
+      } else {
+        status = GameStatus.won;
+        _saveRecord();
+      }
     }
     notifyListeners();
+  }
+
+  /// Endless mode: the centre was reached, so the next world begins. The clock
+  /// keeps running across stages.
+  void _nextStage() {
+    final carried = elapsed;
+    final left = maze;
+    stage++;
+    config = endlessConfig(stage, config.ball, world: _pickWorld());
+    // The next maze starts right below the exit of this one.
+    _nextStartCol = left is RectMaze ? left.goalCol : null;
+    newMaze();
+    _nextStartCol = null;
+    elapsed = carried;
+    _announceStage();
+    prevMaze = left;
+    transition = 0;
+    pos = Offset(pos.dx, 0);
+  }
+
+  /// The ball rolls on into the next maze while the screen scrolls down to it.
+  void _scroll(double dt) {
+    transition = min(1, transition + dt / scrollSeconds);
+    final end = maze.cellCenter(maze.start);
+    final e = Curves.easeInOut.transform(transition);
+    pos = Offset(end.dx, end.dy * e);
+    if (transition >= 1) prevMaze = null;
+    notifyListeners();
+  }
+
+  /// The grid, as (columns, rows), that fills a [width] x [height] area best:
+  /// square cells, edge to edge, as little room left over as possible.
+  static (int, int) gridFor(double width, double height) {
+    var best = (endlessColsChoices.first, minEndlessRows);
+    var bestLeft = double.infinity;
+    for (final cols in endlessColsChoices) {
+      final cell = width / (cols + RectMaze.padX);
+      const pad = RectMaze.padTop + RectMaze.padBottom;
+      final rows = ((height - pad * cell) / cell)
+          .floor()
+          .clamp(minEndlessRows, maxEndlessRows);
+      final left = height - (rows + pad) * cell;
+      if (left < bestLeft - 1e-6) {
+        bestLeft = left;
+        best = (cols, rows);
+      }
+    }
+    return best;
+  }
+
+  /// Endless mode: use a grid of [cols] x [rows] cells from now on (what the
+  /// screen has room for), and build a fresh maze that size if the run has not
+  /// started yet.
+  void fitGrid(int cols, int rows) {
+    if (!endless || (cols == endlessCols && rows == endlessRows)) return;
+    endlessCols = cols;
+    endlessRows = rows;
+    if (!started && stage == 0 && !scrolling) newMaze();
+  }
+
+  /// Endless mode: back to the first world with the clock at zero.
+  void resetRun() {
+    stage = 0;
+    _recent.clear();
+    config = endlessConfig(0, config.ball, world: _pickWorld());
+    newMaze();
+    _announceStage();
+  }
+
+  void _announceStage() {
+    notice = 'notice.level';
+    noticeArgs = {'n': stage + 1, 'world': tr('world.${config.world.name}.name')};
+    noticeLeft = 2.5;
   }
 
   /// A bump against a wall makes a sound of the ball's material, louder the
@@ -428,6 +751,7 @@ class GameController extends ChangeNotifier {
         BallKind.rubber => Sound.impactRubber,
         BallKind.glass => Sound.impactGlass,
         BallKind.stone => Sound.impactStone,
+        BallKind.slime => Sound.impactSlime,
       },
       volume: 0.15 + 0.85 * strength,
     );
@@ -440,8 +764,7 @@ class GameController extends ChangeNotifier {
   /// a faint tick every so often reminds you with your hand, not only the bar.
   void _noiseBuzz(double dt) {
     _buzzCooldown -= dt;
-    final matters =
-        config.world == WorldKind.forest || config.world == WorldKind.city;
+    final matters = _wolfLike || config.world == WorldKind.city;
     if (!matters || noiseLevel < loudNoise || _buzzCooldown > 0) return;
     _buzzCooldown = 0.35;
     Haptics.play(Haptic.tick);
@@ -473,6 +796,116 @@ class GameController extends ChangeNotifier {
     }
     return null;
   }
+
+  // ---- spaceship --------------------------------------------------------
+
+  /// Gravity pulls at the ball while the run is on, unless the stabilizer is.
+  bool get gravityActive =>
+      config.world == WorldKind.space &&
+      hazardsEnabled &&
+      started &&
+      bonusLeft <= 0;
+
+  void _resetGravity() {
+    // Only the spaceship draws random numbers here, so other worlds keep
+    // their seeded layouts.
+    gravityDir = config.world == WorldKind.space ? _randomAxis(null) : const Offset(0, 1);
+    gravityNext = gravityDir;
+    gravityWarnLeft = 0;
+    _gravityTimer = config.gravityInterval;
+  }
+
+  /// One of the four straight directions, never [not].
+  Offset _randomAxis(Offset? not) {
+    const axes = [Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1)];
+    final options = [
+      for (final a in axes)
+        if (a != not) a,
+    ];
+    return options[_rnd.nextInt(options.length)];
+  }
+
+  void _updateGravity(double dt) {
+    if (gravityWarnLeft > 0) {
+      gravityWarnLeft -= dt;
+      if (gravityWarnLeft <= 0) {
+        gravityDir = gravityNext;
+        _gravityTimer = config.gravityInterval;
+      }
+      return;
+    }
+    _gravityTimer -= dt;
+    if (_gravityTimer <= 0) {
+      gravityNext = _randomAxis(gravityDir);
+      gravityWarnLeft = gravityWarning;
+      notice = 'notice.gravity';
+      noticeArgs = const {};
+      noticeLeft = gravityWarning;
+    }
+  }
+
+  /// Where a laser is in its cycle: 0 dark, 1 warning, 2 burning.
+  int laserPhase(Laser l) {
+    final period = config.laserPeriod;
+    final t = (_spaceClock + l.phase) % period;
+    if (t >= period - laserBeam) return 2;
+    if (t >= period - laserBeam - laserWarning) return 1;
+    return 0;
+  }
+
+  bool laserOn(Laser l) => laserPhase(l) == 2;
+
+  /// Whether the ball is in the way of a laser's beam, wall to wall.
+  bool _inBeam(Laser l) {
+    final d = pos - l.center;
+    final along = d.dx * l.along.dx + d.dy * l.along.dy;
+    final across = d.dx * -l.along.dy + d.dy * l.along.dx;
+    return along.abs() < 0.1 + ballRadius * 0.6 && across.abs() < 0.6;
+  }
+
+  /// Which way the camera looks now, in radians.
+  double cameraAngle(SecurityCamera c) =>
+      c.base + cameraSweep * sin(2 * pi * (_spaceClock + c.phase) / config.cameraPeriod);
+
+  /// Whether the ball is in the camera's view: near enough, inside the cone
+  /// and with no wall in between.
+  bool cameraSees(SecurityCamera c) {
+    final v = pos - c.pos;
+    if (v.distance > cameraRange) return false;
+    var diff = (v.direction - cameraAngle(c)) % kTwoPi;
+    if (diff > pi) diff -= kTwoPi;
+    if (diff.abs() > cameraHalfAngle) return false;
+    return _lineClear(c.pos, pos);
+  }
+
+  /// How far a ray from [from] along [angle] gets before a wall stops it
+  /// (at most [range]); the view cones are drawn with this.
+  double sightDistance(Offset from, double angle, double range) {
+    final end = from + polar(range, angle);
+    var best = range;
+    for (final s in maze.segmentsAlong(from, end)) {
+      if (s.gate >= 0 && gateOpen[s.gate]) continue;
+      final r = end - from;
+      final q = s.b - s.a;
+      final denom = r.dx * q.dy - r.dy * q.dx;
+      if (denom.abs() < 1e-9) continue;
+      final w = s.a - from;
+      final t = (w.dx * q.dy - w.dy * q.dx) / denom;
+      final u = (w.dx * r.dy - w.dy * r.dx) / denom;
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) best = min(best, t * range);
+    }
+    return best;
+  }
+
+  /// Where an airlock is in its cycle: 0 open, 1 about to shut, 2 shut.
+  int airlockPhase(Airlock a) {
+    final t = (_spaceClock + a.phase) % airlockCycle;
+    if (t < airlockOpen) return 0;
+    if (t < airlockOpen + airlockWarning) return 1;
+    return 2;
+  }
+
+  bool airlockClosed(Airlock a) => airlockPhase(a) == 2;
 
   void _updateWind(double dt) {
     if (windLeft > 0) {
@@ -507,6 +940,7 @@ class GameController extends ChangeNotifier {
     if (windLeft > 0) {
       vel += windDir * (config.windStrength * (1 - ball.windResist) * dt);
     }
+    if (gravityActive) vel += gravityDir * (config.gravityStrength * dt);
 
     if (config.world == WorldKind.mud) {
       final boggy = patch != null && bonusLeft <= 0;
@@ -523,39 +957,55 @@ class GameController extends ChangeNotifier {
       if (sink >= 1) _lose('lose.bog');
     }
 
-    vel *= exp(-(muddy ? 7.0 : 1.7 * ball.damping) * dt);
-    final cap = muddy ? 1.8 : _maxSpeed * ball.maxSpeed;
+    // Cold fog drags at the ball, though it never stops it.
+    final cold = fog.any((f) => (f.pos - pos).distance < f.radius);
+    vel *= exp(-(muddy ? 7.0 : cold ? 4.2 : 1.7 * ball.damping) * dt);
+    final cap = muddy
+        ? 1.8
+        : _maxSpeed * ball.maxSpeed * (cold ? 0.5 : 1.0);
     if (vel.distance > cap) vel = vel / vel.distance * cap;
 
     final steps = max(1, (vel.distance * dt / 0.07).ceil());
+    _touchingWall = false;
     for (var i = 0; i < steps; i++) {
       pos += vel * (dt / steps);
       _collide();
     }
+    // A sticky ball clings to the wall it is up against.
+    if (_touchingWall && ball.stick > 0) vel *= exp(-ball.stick * dt);
+  }
+
+  /// The walls around the ball, with the airlock doors that are shut.
+  Iterable<Seg> _wallsNear() {
+    final walls = maze.segmentsNear(pos);
+    if (airlocks.isEmpty) return walls;
+    return [
+      ...walls,
+      for (final a in airlocks)
+        if (airlockClosed(a)) a.seg,
+    ];
   }
 
   void _collide() {
     final reach = ballRadius + PolarMaze.wallHalf;
     for (var iter = 0; iter < 2; iter++) {
-      final ring = min(pos.distance.floor(), maze.rings + 1);
-      for (var k = max(0, ring - 1); k <= min(maze.rings + 1, ring + 1); k++) {
-        for (final s in maze.byRing[k]) {
-          if (s.gate >= 0 && gateOpen[s.gate]) continue;
-          final ab = s.b - s.a;
-          final t = (((pos - s.a).dx * ab.dx + (pos - s.a).dy * ab.dy) /
-                  (ab.dx * ab.dx + ab.dy * ab.dy))
-              .clamp(0.0, 1.0);
-          final q = s.a + ab * t;
-          final d = pos - q;
-          final dist = d.distance;
-          if (dist >= reach) continue;
-          final n = dist < 1e-6 ? Offset(-ab.dy, ab.dx) / ab.distance : d / dist;
-          pos = q + n * reach;
-          final vn = vel.dx * n.dx + vel.dy * n.dy;
-          if (vn < 0) {
-            vel -= n * (vn * (1 + ball.bounce));
-            _impact = max(_impact, -vn);
-          }
+      for (final s in _wallsNear()) {
+        if (s.gate >= 0 && gateOpen[s.gate]) continue;
+        final ab = s.b - s.a;
+        final t = (((pos - s.a).dx * ab.dx + (pos - s.a).dy * ab.dy) /
+                (ab.dx * ab.dx + ab.dy * ab.dy))
+            .clamp(0.0, 1.0);
+        final q = s.a + ab * t;
+        final d = pos - q;
+        final dist = d.distance;
+        if (dist < reach + touchMargin) _touchingWall = true;
+        if (dist >= reach) continue;
+        final n = dist < 1e-6 ? Offset(-ab.dy, ab.dx) / ab.distance : d / dist;
+        pos = q + n * reach;
+        final vn = vel.dx * n.dx + vel.dy * n.dy;
+        if (vn < 0) {
+          vel -= n * (vn * (1 + ball.bounce));
+          _impact = max(_impact, -vn);
         }
       }
     }
@@ -577,10 +1027,10 @@ class GameController extends ChangeNotifier {
       }
     }
     // Soft limit around the maze so the ball cannot wander off outside.
-    final limit = maze.radius + _trailLength - ballRadius;
-    if (pos.distance > limit) {
-      final n = pos / pos.distance;
-      pos = n * limit;
+    final out = maze.constrain(pos, ballRadius);
+    if (out != null) {
+      final (inside, n) = out;
+      pos = inside;
       final vn = vel.dx * n.dx + vel.dy * n.dy;
       if (vn > 0) vel -= n * vn;
     }
@@ -627,8 +1077,18 @@ class GameController extends ChangeNotifier {
       case WorldKind.mud:
       case WorldKind.mountains:
         hazards.clear();
+      case WorldKind.graveyard:
+        // Holy water: every ghost is awake and driven off for the duration.
+        for (final g in creatures) {
+          g.asleep = false;
+          g.lockLeft = bonusDuration;
+          g.grace = 0;
+          g.calm = 0;
+          g.awakeTimer = 12;
+        }
       case WorldKind.underground:
-        break;
+      case WorldKind.space:
+        break; // the light and the stabilizer work through [bonusLeft]
     }
     notifyListeners();
   }
@@ -701,7 +1161,7 @@ class GameController extends ChangeNotifier {
       final heard = radius > 0 && (c.pos - pos).distance <= radius;
       c.hearing = heard ? c.hearing + dt * (1 + noiseLevel * 2) : max(0, c.hearing - dt * 2);
       if (c.hearing < wakeAfter) continue;
-      if (config.world == WorldKind.forest) {
+      if (_wolfLike) {
         if (c.asleep) _wake(c);
       } else if (c.asleep || !c.searching) {
         _alertDrone(c, pos);
@@ -713,13 +1173,11 @@ class GameController extends ChangeNotifier {
   /// A loud bump at [at]: sleeping wolves within earshot wake up, and drones
   /// (asleep or not) come to look at the spot.
   void noise(Offset at) {
-    if (config.world != WorldKind.forest && config.world != WorldKind.city) {
-      return;
-    }
+    if (!_wolfLike && config.world != WorldKind.city) return;
     bursts.add(Burst(at, 3));
     for (final c in creatures) {
       if (c.lockLeft > 0 || (c.pos - at).distance > noiseRadius) continue;
-      if (config.world == WorldKind.forest) {
+      if (_wolfLike) {
         if (c.asleep) _wake(c);
       } else {
         _alertDrone(c, at);
@@ -728,7 +1186,10 @@ class GameController extends ChangeNotifier {
   }
 
   void _wake(Creature w) {
-    if (w.asleep) Sfx.play(Sound.wolfWake, volume: _earshot(w.pos));
+    if (w.asleep) {
+      final cry = config.world == WorldKind.graveyard ? Sound.ghostWake : Sound.wolfWake;
+      Sfx.play(cry, volume: _earshot(w.pos));
+    }
     w.asleep = false;
     w.grace = 0.9;
     w.awakeTimer = 12 + _rnd.nextDouble() * 8;
@@ -764,7 +1225,7 @@ class GameController extends ChangeNotifier {
       hazards.clear(); // switched off by the bonus
       return;
     }
-    if (config.world == WorldKind.forest || config.world == WorldKind.city) {
+    if (_wolfLike || config.world == WorldKind.city) {
       _listen(dt);
     }
     switch (config.world) {
@@ -864,6 +1325,62 @@ class GameController extends ChangeNotifier {
             d.route.clear();
           }
         }
+      case WorldKind.graveyard:
+        for (final g in creatures) {
+          if (g.lockLeft > 0) {
+            // Holy water: the ghosts shrink away from the ball.
+            final away = g.pos - pos;
+            final d = away.distance;
+            final dir = d < 1e-6 ? const Offset(1, 0) : away / d;
+            g.pos = maze.clampInside(g.pos + dir * (speed * 1.8 * dt));
+            g.angle = dir.direction;
+            continue;
+          }
+          if (g.asleep) continue;
+          if (g.grace > 0) {
+            g.grace -= dt;
+            continue;
+          }
+          // The ball froze: the ghost loses interest, then fades into its grave.
+          if (stillTime >= stillBeforeBored) {
+            g.calm += dt;
+            if (g.calm >= boredBeforeSleep) {
+              g.asleep = true;
+              g.calm = 0;
+            }
+            continue;
+          }
+          g.calm = 0;
+          // Straight at the ball, through the walls.
+          final to = pos - g.pos;
+          final d = to.distance;
+          if (d > 1e-6) {
+            g.pos += to / d * min(d, speed * 0.85 * dt);
+            g.angle = to.direction;
+          }
+          if ((g.pos - pos).distance < 0.4) {
+            _lose('lose.ghost');
+            break;
+          }
+          // Tired ghosts drift off to sleep once the ball is far away.
+          g.awakeTimer -= dt;
+          if (g.awakeTimer <= 0 && (g.pos - pos).distance > 5) g.asleep = true;
+        }
+      case WorldKind.space:
+        _spaceClock += dt;
+        for (final l in lasers) {
+          if (laserOn(l) && _inBeam(l)) {
+            _lose('lose.laser');
+            break;
+          }
+        }
+        for (final cam in cameras) {
+          if (status != GameStatus.playing) break;
+          cam.alert = cameraSees(cam)
+              ? cam.alert + dt
+              : max(0, cam.alert - dt * 1.5);
+          if (cam.alert >= cameraReaction) _lose('lose.camera');
+        }
       case WorldKind.underground:
       case WorldKind.mud:
       case WorldKind.mountains:
@@ -881,12 +1398,14 @@ class GameController extends ChangeNotifier {
           if ((h.pos - pos).distance < h.radius + 0.1) _lose('lose.rock');
         }
       } else if (h.armed && (h.pos - pos).distance < h.radius) {
-        _lose('lose.trap');
+        _lose(config.world == WorldKind.graveyard ? 'lose.grave' : 'lose.trap');
       }
     }
     hazards.removeWhere((h) => h.age > h.life);
 
-    if (config.world == WorldKind.mud || config.world == WorldKind.mountains) {
+    if (config.world == WorldKind.mud ||
+        config.world == WorldKind.mountains ||
+        config.world == WorldKind.graveyard) {
       _spawnTimer -= dt;
       if (_spawnTimer <= 0) {
         _spawnTimer = config.trapInterval *
@@ -931,17 +1450,9 @@ class GameController extends ChangeNotifier {
   }
 
   bool _lineClear(Offset a, Offset b) {
-    final steps = max(1, ((b - a).distance / 0.5).ceil());
-    final rings = <int>{};
-    for (var i = 0; i <= steps; i++) {
-      final p = Offset.lerp(a, b, i / steps)!;
-      rings.add(min(p.distance.floor(), maze.rings + 1));
-    }
-    for (final k in rings) {
-      for (final s in maze.byRing[k]) {
-        if (s.gate >= 0 && gateOpen[s.gate]) continue;
-        if (_cross(a, b, s.a, s.b)) return false;
-      }
+    for (final s in maze.segmentsAlong(a, b)) {
+      if (s.gate >= 0 && gateOpen[s.gate]) continue;
+      if (_cross(a, b, s.a, s.b)) return false;
     }
     return true;
   }
@@ -988,9 +1499,7 @@ class GameController extends ChangeNotifier {
       // Try the preferred direction first, then turn away step by step.
       final turn = k == 0 ? 0.0 : (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * pi / 4;
       var cand = pos + polar(lead, base + spread + turn);
-      if (cand.distance > maze.radius) {
-        cand = cand / cand.distance * maze.radius;
-      }
+      cand = maze.clampInside(cand);
       if ((cand - pos).distance >= minBoulderDistance) target = cand;
     }
     lead = minBoulderDistance;
@@ -1018,7 +1527,7 @@ class GameController extends ChangeNotifier {
         final p = maze.cellCenter(c);
         if ((p - pos).distance < minSpikeDistance) continue;
         if (hazards.any((h) => (h.pos - p).distance < 0.6)) continue;
-        hazards.add(Hazard(p, armAt: 0.5, life: 6));
+        hazards.add(_newPit(p));
         return;
       }
     }
@@ -1028,10 +1537,16 @@ class GameController extends ChangeNotifier {
       if (special.contains(c)) continue;
       final p = maze.cellCenter(c);
       if ((p - pos).distance < minSpikeDistance + 0.5) continue;
-      hazards.add(Hazard(p, armAt: 0.5, life: 6));
+      hazards.add(_newPit(p));
       return;
     }
   }
+
+  /// A spike trap (mud) or a grave that caves in (graveyard): the ground
+  /// cracks first, and the graves give a longer warning.
+  Hazard _newPit(Offset p) => config.world == WorldKind.graveyard
+      ? Hazard(p, armAt: 1.1, life: 7, radius: 0.32)
+      : Hazard(p, armAt: 0.5, life: 6);
 
   /// Wolf: walk the shortest corridor route to the ball.
   void _followPath(Creature w, double dt, double speed) {

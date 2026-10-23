@@ -45,7 +45,7 @@ void main() {
         hazardsEnabled: false,
         seed: level,
       );
-      final m = game.maze;
+      final m = game.maze as PolarMaze;
 
       void goTo(int targetCell) {
         final route = m.routePoints(
@@ -92,7 +92,7 @@ void main() {
       const GameConfig(WorldKind.city, 3),
       seed: 21,
     );
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     game.gateOpen = List<bool>.filled(m.gateCount, true);
     final drone = game.creatures.first;
     expect(drone.asleep, isTrue);
@@ -158,7 +158,7 @@ void main() {
       const GameConfig(WorldKind.city, 5),
       seed: 11,
     );
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     game.gateOpen = List<bool>.filled(m.gateCount, true);
     final drone = game.creatures.first;
 
@@ -412,7 +412,7 @@ void main() {
 
   test('drones wake for a loud ball and go to where it was heard', () {
     final game = GameController(const GameConfig(WorldKind.city, 2), seed: 18);
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     game.gateOpen = List<bool>.filled(m.gateCount, true);
     final d = game.creatures.first;
     expect(d.asleep, isTrue);
@@ -430,7 +430,7 @@ void main() {
     // Find a maze whose first button is a good way off, so a route exists.
     for (var seed = 0; seed < 40; seed++) {
       final game = GameController(const GameConfig(WorldKind.mud, 3), seed: seed);
-      final m = game.maze;
+      final m = game.maze as PolarMaze;
       final route = m.path(m.cellAt(game.pos), m.buttonCells[0], game.gateOpen)!;
       if (route.length < 9) {
         game.dispose();
@@ -502,7 +502,7 @@ void main() {
     // Rolling out along the corridor frees the ball.
     game = make();
     game.started = true;
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     final patch = game.mud.last;
     game.pos = patch.pos;
     final route = m.routePoints(m.path(m.cellAt(patch.pos), m.goal, List<bool>.filled(m.gateCount, true))!).skip(1).toList();
@@ -569,7 +569,7 @@ void main() {
 
   test('a landed boulder is solid until it crumbles', () {
     final game = GameController(const GameConfig(WorldKind.mountains, 3), seed: 4);
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     final n = m.sectors.last;
     final theta = (m.entrance + 0.5) * 2 * pi / n;
     final out = Offset(cos(theta), sin(theta));
@@ -620,7 +620,7 @@ void main() {
   });
   test('the minimap only uncovers cells the ball has been near', () {
     final game = GameController(const GameConfig(WorldKind.forest, 3), seed: 5);
-    final m = game.maze;
+    final m = game.maze as PolarMaze;
     expect(game.explored[m.start], isTrue);
     final atStart = game.exploredCount;
     expect(atStart, lessThan(m.cellCount ~/ 4), reason: 'most of the maze is hidden');
@@ -652,14 +652,14 @@ void main() {
 
     // Open ground just outside the entrance, and the direction pointing out.
     (Offset, Offset) outside(GameController g) {
-      final m = g.maze;
+      final m = g.maze as PolarMaze;
       final theta = (m.entrance + 0.5) * 2 * pi / m.sectors.last;
       final out = Offset(cos(theta), sin(theta));
       return (out * (m.radius + 0.6), out);
     }
 
-    test('five different materials', () {
-      expect(BallKind.values.length, 5);
+    test('six different materials', () {
+      expect(BallKind.values.length, 6);
       final sizes = {for (final k in BallKind.values) statsOf(k).radius};
       expect(sizes.length, greaterThan(2));
       for (final k in BallKind.values) {
@@ -730,7 +730,7 @@ void main() {
     test('glass shatters on a hard hit, the others do not', () {
       bool breaks(BallKind b, double speed) {
         final g = make(b);
-        final m = g.maze;
+        final m = g.maze as PolarMaze;
         final n = m.sectors.last;
         final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n; // a closed stretch of wall
         final out = Offset(cos(theta), sin(theta));
@@ -754,7 +754,7 @@ void main() {
     test('rubber bounces back off a wall much more than wood or steel', () {
       double rebound(BallKind b) {
         final g = make(b);
-        final m = g.maze;
+        final m = g.maze as PolarMaze;
         final n = m.sectors.last;
         final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n;
         final out = Offset(cos(theta), sin(theta));

@@ -131,6 +131,17 @@ _Marks _marksOf(BallKind kind) => _marksCache.putIfAbsent(kind, () {
                 0.06 + rnd.nextDouble() * 0.05,
               ),
           ]);
+        case BallKind.slime:
+          // Bubbles trapped in the gel.
+          return _Marks(const [], [
+            for (var i = 0; i < 12; i++)
+              _Dot(
+                _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                    rnd.nextDouble() * 2 - 1),
+                Colors.white.withValues(alpha: 0.55),
+                0.05 + rnd.nextDouble() * 0.09,
+              ),
+          ]);
         case BallKind.stone:
           final crack = [
             for (var i = 0; i <= 14; i++)
@@ -189,6 +200,18 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
     case BallKind.stone:
       c.drawCircle(p, r,
           sphere(const [Color(0xFFC4C4BB), Color(0xFF7D7D75), Color(0xFF3C3C37)], const [0, 0.55, 1]));
+    case BallKind.slime:
+      // Glossy green gel: see-through at the middle, deeper at the edge.
+      c.drawCircle(p, r, Paint()..color = const Color(0xFF3DDC5A).withValues(alpha: 0.5));
+      c.drawCircle(
+          p,
+          r,
+          Paint()
+            ..shader = ui.Gradient.radial(light, r * 1.7, [
+              const Color(0xFFD8FFB0).withValues(alpha: 0.95),
+              const Color(0xFF53D63C).withValues(alpha: 0.8),
+              const Color(0xFF1B7A2A).withValues(alpha: 0.95),
+            ], const [0, 0.5, 1]));
   }
 
   // Markings, turned by the ball's orientation; only the half facing the
@@ -227,7 +250,7 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
     );
   }
 
-  if (kind == BallKind.glass) {
+  if (kind == BallKind.glass || kind == BallKind.slime) {
     c.drawCircle(
       p,
       r,

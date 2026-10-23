@@ -1,20 +1,14 @@
 import 'dart:math';
 import 'dart:ui' show Offset, Path, Rect;
 
+import 'maze.dart';
+
+export 'maze.dart' show Seg;
+
 const double kTwoPi = 2 * pi;
 
 Offset polar(double rho, double theta) =>
     Offset(rho * cos(theta), rho * sin(theta));
-
-/// A wall piece used for collision. [gate] is the index of the gate this
-/// piece belongs to, or -1 for a permanent wall.
-class Seg {
-  const Seg(this.a, this.b, this.gate);
-
-  final Offset a;
-  final Offset b;
-  final int gate;
-}
 
 /// A circular hedge maze: ring 0 is the centre disc (the goal), ring
 /// `rings - 1` is the outermost ring with the entrance in its outer wall.
@@ -25,7 +19,7 @@ class Seg {
 /// `2 * cell + 1`). The maze is a spanning tree of open edges; some tree edges
 /// on the start-to-goal route are *gates* that stay closed until a button is
 /// pressed, so the maze is always solvable.
-class PolarMaze {
+class PolarMaze implements Maze {
   PolarMaze._({
     required this.rings,
     required this.sectors,
@@ -66,11 +60,14 @@ class PolarMaze {
   final int entrance;
 
   /// Per gate index: the cell holding the button that opens it.
+  @override
   final List<int> buttonCells;
 
   /// Cells from the start to the goal.
+  @override
   final List<int> solution;
 
+  @override
   late final int cellCount;
   late final List<int> ringOfCell;
   late final List<List<(int, int)>> _adjacency;
@@ -78,15 +75,20 @@ class PolarMaze {
   /// Collision walls grouped by ring (arcs appear in both rings they touch).
   late final List<List<Seg>> byRing;
 
+  @override
   int get goal => 0;
+  @override
   int get start => offset[rings - 1] + entrance;
+  @override
   int get gateCount => buttonCells.length;
+  @override
   double get radius => rings.toDouble();
 
   int sectorOf(int cell) => cell - offset[ringOfCell[cell]];
 
   // ---- geometry ---------------------------------------------------------
 
+  @override
   Offset cellCenter(int cell) {
     final r = ringOfCell[cell];
     if (r == 0) return Offset.zero;
@@ -95,6 +97,7 @@ class PolarMaze {
   }
 
   /// The cell containing [p] (points outside the maze map to the outer ring).
+  @override
   int cellAt(Offset p) {
     final rho = p.distance;
     if (rho < 1) return 0;
@@ -107,6 +110,7 @@ class PolarMaze {
 
   /// Points to walk through to get along [cells]: the centre of each cell with
   /// the middle of each passage in between.
+  @override
   List<Offset> routePoints(List<int> cells) {
     final pts = <Offset>[];
     for (var i = 0; i < cells.length; i++) {
@@ -154,8 +158,10 @@ class PolarMaze {
     return res;
   }
 
+  @override
   List<(int, int)> neighbours(int cell) => _adjacency[cell];
 
+  @override
   int edgeBetween(int a, int b) {
     for (final (n, e) in _adjacency[a]) {
       if (n == b) return e;
@@ -164,10 +170,12 @@ class PolarMaze {
   }
 
   /// Passage that can be walked with the given gate states.
+  @override
   bool passable(int edge, List<bool> gateOpen) =>
       open[edge] && (gateOf[edge] < 0 || gateOpen[gateOf[edge]]);
 
   /// Shortest walk from [from] to [to] through passable edges, or null.
+  @override
   List<int>? path(int from, int to, List<bool> gateOpen) {
     final prev = List<int>.filled(cellCount, -2);
     prev[from] = -1;
@@ -187,6 +195,50 @@ class PolarMaze {
       out.add(c);
     }
     return out.reversed.toList();
+  }
+
+  // ---- Maze interface ---------------------------------------------------
+
+  @override
+  int get scatterCount => rings;
+
+  @override
+  bool get fullView => false;
+
+  @override
+  Iterable<Seg> segmentsNear(Offset p) sync* {
+    final ring = min(p.distance.floor(), rings + 1);
+    for (var k = max(0, ring - 1); k <= min(rings + 1, ring + 1); k++) {
+      yield* byRing[k];
+    }
+  }
+
+  @override
+  Iterable<Seg> segmentsAlong(Offset a, Offset b) sync* {
+    final steps = max(1, ((b - a).distance / 0.5).ceil());
+    final seen = <int>{};
+    for (var i = 0; i <= steps; i++) {
+      final p = Offset.lerp(a, b, i / steps)!;
+      seen.add(min(p.distance.floor(), rings + 1));
+    }
+    for (final k in seen) {
+      yield* byRing[k];
+    }
+  }
+
+  @override
+  bool atGoal(Offset p) => p.distance < 0.55;
+
+  @override
+  Offset clampInside(Offset p) =>
+      p.distance > radius ? p / p.distance * radius : p;
+
+  @override
+  (Offset, Offset)? constrain(Offset p, double r) {
+    final limit = radius + trailLength - r;
+    if (p.distance <= limit) return null;
+    final n = p / p.distance;
+    return (n * limit, n);
   }
 
   // ---- walls ------------------------------------------------------------
@@ -277,6 +329,7 @@ class PolarMaze {
   }
 
   /// All permanent walls, including the outer wall, as one path to stroke.
+  @override
   Path wallPath() {
     final path = Path();
     for (var e = 2 * offset[1]; e < 2 * cellCount; e++) {
@@ -296,6 +349,7 @@ class PolarMaze {
   }
 
   /// The wall piece that gate [index] closes.
+  @override
   Path gatePath(int index) {
     final path = Path();
     for (var e = 2 * offset[1]; e < 2 * cellCount; e++) {
@@ -305,6 +359,7 @@ class PolarMaze {
   }
 
   /// Rough centre of gate [index], for effects and hints.
+  @override
   Offset gateCenter(int index) {
     for (var e = 2 * offset[1]; e < 2 * cellCount; e++) {
       if (gateOf[e] == index) {
@@ -340,24 +395,28 @@ class PolarMaze {
 
   /// Builds a perfect maze with [gates] gates on the way to the centre and one
   /// button per gate, placed so each button can be reached before its gate.
+  ///
+  /// With [entranceOnTop] the entrance is the sector at the top of the screen
+  /// (otherwise a random one).
   static PolarMaze generate({
     required int rings,
     required int gates,
     Random? random,
+    bool entranceOnTop = false,
   }) {
     final rnd = random ?? Random();
     PolarMaze? best;
     for (var attempt = 0; attempt < 80; attempt++) {
-      final m = _attempt(rings, gates, rnd);
+      final m = _attempt(rings, gates, rnd, top: entranceOnTop);
       if (m == null) continue;
       if (best == null || m.solution.length > best.solution.length) best = m;
       if (m.solution.length >= gates * 3 + rings) break;
     }
-    return best ?? _attempt(rings, gates, rnd, relaxed: true)!;
+    return best ?? _attempt(rings, gates, rnd, relaxed: true, top: entranceOnTop)!;
   }
 
   static PolarMaze? _attempt(int rings, int gates, Random rnd,
-      {bool relaxed = false}) {
+      {bool relaxed = false, bool top = false}) {
     final sectors = _sectorsFor(rings);
     final offset = <int>[0];
     for (var r = 1; r < rings; r++) {
@@ -366,7 +425,8 @@ class PolarMaze {
     final cellCount = offset.last + sectors.last;
     final open = List<bool>.filled(2 * cellCount, false);
     final gateOf = List<int>.filled(2 * cellCount, -1);
-    final entrance = rnd.nextInt(sectors.last);
+    // Screen y points down, so the top of the screen is the angle 3/2 pi.
+    final entrance = top ? sectors.last * 3 ~/ 4 : rnd.nextInt(sectors.last);
 
     // Throwaway instance just to reuse the adjacency logic.
     final probe = PolarMaze._(
@@ -410,53 +470,17 @@ class PolarMaze {
     if (!relaxed && edges.length < gates * 2 + 3) return null;
     if (edges.length < gates) return null;
 
-    // One gate per slice of the route, so they are spread out.
-    for (var j = 0; j < gates; j++) {
-      final lo = edges.length * j ~/ gates;
-      final hi = max(lo + 1, edges.length * (j + 1) ~/ gates);
-      gateOf[edges[lo + rnd.nextInt(hi - lo)]] = j;
-    }
-
-    // Button j goes somewhere reachable while gates j.. are still closed,
-    // preferably down a side branch away from the main route.
-    final onRoute = route.toSet();
-    final used = <int>{start, 0};
-    final buttons = <int>[];
-    for (var j = 0; j < gates; j++) {
-      bool before(int e) => open[e] && gateOf[e] < j;
-      final comp = _reach(probe, [start], before);
-      final dist = _distances(probe, onRoute.where(comp.contains), before);
-      var cands = [
-        for (final c in comp)
-          if (!onRoute.contains(c) && !used.contains(c)) c,
-      ];
-      if (cands.isEmpty) {
-        cands = [
-          for (final c in comp)
-            if (!used.contains(c)) c,
-        ];
-      }
-      if (cands.isEmpty) return null;
-      // Keep the buttons apart: ask for a minimum distance to the earlier
-      // ones, relaxing it when the allowed area is too small.
-      var sep = 1.2 * rings / sqrt(gates);
-      var spread = cands;
-      while (sep > 0.5) {
-        spread = [
-          for (final c in cands)
-            if (buttons.every((b) =>
-                (probe.cellCenter(c) - probe.cellCenter(b)).distance >= sep))
-              c,
-        ];
-        if (spread.isNotEmpty) break;
-        sep *= 0.8;
-      }
-      if (spread.isEmpty) spread = cands;
-      spread.sort((a, b) => (dist[b] ?? 0).compareTo(dist[a] ?? 0));
-      final pick = spread[rnd.nextInt(max(1, min(spread.length, max(3, spread.length ~/ 3))))];
-      used.add(pick);
-      buttons.add(pick);
-    }
+    placeGates(edges, gates, gateOf, rnd);
+    final buttons = placeButtons(
+      probe,
+      open: open,
+      gateOf: gateOf,
+      route: route,
+      gates: gates,
+      scale: rings.toDouble(),
+      rnd: rnd,
+    );
+    if (buttons == null) return null;
 
     return PolarMaze._(
       rings: rings,
@@ -468,34 +492,5 @@ class PolarMaze {
       buttonCells: buttons,
       solution: route,
     );
-  }
-
-  static Set<int> _reach(PolarMaze m, Iterable<int> from, bool Function(int) ok) {
-    final seen = <int>{...from};
-    final queue = [...from];
-    for (var i = 0; i < queue.length; i++) {
-      for (final (n, e) in m._adjacency[queue[i]]) {
-        if (!seen.contains(n) && ok(e)) {
-          seen.add(n);
-          queue.add(n);
-        }
-      }
-    }
-    return seen;
-  }
-
-  static Map<int, int> _distances(
-      PolarMaze m, Iterable<int> from, bool Function(int) ok) {
-    final dist = {for (final c in from) c: 0};
-    final queue = [...from];
-    for (var i = 0; i < queue.length; i++) {
-      for (final (n, e) in m._adjacency[queue[i]]) {
-        if (!dist.containsKey(n) && ok(e)) {
-          dist[n] = dist[queue[i]]! + 1;
-          queue.add(n);
-        }
-      }
-    }
-    return dist;
   }
 }

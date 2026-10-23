@@ -2,7 +2,7 @@ import 'dart:math';
 
 /// The material the ball is made of. Each one trades something for something
 /// else; the numbers are multipliers on the standard (wooden) ball.
-enum BallKind { wood, steel, rubber, glass, stone }
+enum BallKind { wood, steel, rubber, glass, stone, slime }
 
 class BallStats {
   const BallStats({
@@ -14,6 +14,7 @@ class BallStats {
     this.noise = 1,
     this.windResist = 0,
     this.bogResist = 0,
+    this.stick = 0,
     this.breaksAt,
   });
 
@@ -38,8 +39,12 @@ class BallStats {
   /// Share of a gust of wind it shrugs off (negative: blown harder).
   final double windResist;
 
-  /// Share of a bog's pull and suction it resists.
+  /// Share of a bog's pull and suction it resists (negative: sinks faster).
   final double bogResist;
+
+  /// How strongly it clings to a wall it touches: extra rolling friction per
+  /// second while it is up against one.
+  final double stick;
 
   /// A hit at least this hard destroys it (null: unbreakable).
   final double? breaksAt;
@@ -77,6 +82,16 @@ BallStats statsOf(BallKind kind) => switch (kind) {
           noise: 0.8,
           windResist: 0.6,
           bogResist: 0.5,
+        ),
+      BallKind.slime => const BallStats(
+          accel: 0.9,
+          maxSpeed: 0.9,
+          damping: 1.3,
+          bounce: 0,
+          noise: 0.5,
+          windResist: 0.35,
+          bogResist: -0.4,
+          stick: 2.5,
         ),
     };
 

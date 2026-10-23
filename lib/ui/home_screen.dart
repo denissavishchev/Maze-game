@@ -35,9 +35,22 @@ class HomeScreen extends StatelessWidget {
                     const _Sign(),
                     const Spacer(flex: 4),
                     ChunkyButton(
-                      label: tr('play'),
+                      label: tr('play.endless'),
+                      icon: Icons.all_inclusive_rounded,
+                      look: ButtonLook.gold,
+                      fontSize: 20,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SelectScreen(endless: true),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ChunkyButton(
+                      label: tr('play.single'),
                       icon: Icons.play_arrow_rounded,
                       look: ButtonLook.leaf,
+                      fontSize: 20,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(builder: (_) => const SelectScreen()),
                       ),

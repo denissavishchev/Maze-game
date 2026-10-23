@@ -4,7 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../game/game_controller.dart';
+import '../game/maze.dart';
 import '../game/polar_maze.dart';
+import '../game/rect_maze.dart';
 import '../game/world.dart';
 import 'balls.dart';
 import 'maze_art.dart';
@@ -14,14 +16,24 @@ import 'worlds.dart';
 /// Visible width of the maze on screen, in maze units.
 const double kViewUnits = 9;
 
+/// Floor items (buttons, bonuses) are drawn at this fraction of their full
+/// size, so they fit between the walls of a corridor.
+const double kItemScale = 0.68;
+
 /// Caches the static picture and the gate paths of one maze.
 class MazeRender {
   MazeRender(this.maze, this.theme)
-      : picture = buildMazePicture(maze, theme, maze.cellCount * 31 + maze.entrance),
+      : picture = switch (maze) {
+          final RectMaze r =>
+            buildRectMazePicture(r, theme, r.cellCount * 31 + r.start),
+          final PolarMaze p =>
+            buildMazePicture(p, theme, p.cellCount * 31 + p.entrance),
+          _ => throw ArgumentError('unknown maze ${maze.runtimeType}'),
+        },
         walls = maze.wallPath(),
         gates = [for (var j = 0; j < maze.gateCount; j++) maze.gatePath(j)];
 
-  final PolarMaze maze;
+  final Maze maze;
   final WorldTheme theme;
   final ui.Picture picture;
   final Path walls;
@@ -36,6 +48,7 @@ class MazeRender {
     if (_fogCount == game.exploredCount) return _fog;
     _fogCount = game.exploredCount;
     final path = Path();
+    final maze = this.maze as PolarMaze; // only the round maze has a minimap
     for (var c = 0; c < maze.cellCount; c++) {
       if (!game.explored[c]) continue;
       final r = maze.ringOfCell[c];
@@ -63,25 +76,58 @@ class MazeRender {
 double _clock() => DateTime.now().millisecondsSinceEpoch / 1000.0;
 
 class GamePainter extends CustomPainter {
-  GamePainter(this.game, this.render) : super(repaint: game);
+  GamePainter(this.game, this.render, {this.prevRender}) : super(repaint: game);
 
   final GameController game;
   final MazeRender render;
+
+  /// Endless mode, while scrolling: the maze being left.
+  final MazeRender? prevRender;
 
   WorldTheme get theme => render.theme;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final s = size.width / kViewUnits;
+    final maze = game.maze;
+    // The round maze scrolls with the ball; the rectangular one is shown whole.
+    final s = maze is RectMaze
+        ? min(size.width / (maze.cols + RectMaze.padX),
+            size.height / (maze.rows + RectMaze.padTop + RectMaze.padBottom))
+        : size.width / kViewUnits;
     final t = _clock();
 
     canvas.save();
     canvas.clipRect(Offset.zero & size);
-    canvas.translate(size.width / 2, size.height / 2);
+    // Where the maze's origin is on the screen. The rectangular maze sits
+    // against the bottom, centred sideways; while scrolling it starts one maze
+    // lower, so the maze being left slides up out of view.
+    var origin = Offset(size.width / 2, size.height / 2) - game.camera * s;
+    if (maze is RectMaze) {
+      final e = Curves.easeInOut.transform(game.transition);
+      origin = Offset(
+        (size.width - maze.cols * s) / 2,
+        size.height - (maze.rows + RectMaze.padBottom) * s + (1 - e) * maze.rows * s,
+      );
+    }
+    canvas.translate(origin.dx, origin.dy);
     canvas.scale(s);
-    canvas.translate(-game.camera.dx, -game.camera.dy);
 
-    canvas.drawPicture(render.picture);
+    final left = prevRender;
+    if (maze is RectMaze && game.scrolling && left != null) {
+      // The new maze below, the old one above it; each only in its own band.
+      canvas.save();
+      canvas.clipRect(Rect.fromLTRB(-50, -0.3, 50, maze.rows + 3.0));
+      canvas.drawPicture(render.picture);
+      canvas.restore();
+      final oldRows = (left.maze as RectMaze).rows;
+      canvas.save();
+      canvas.translate(0, -oldRows.toDouble());
+      canvas.clipRect(Rect.fromLTRB(-50, -3, 50, oldRows.toDouble()));
+      canvas.drawPicture(left.picture);
+      canvas.restore();
+    } else {
+      canvas.drawPicture(render.picture);
+    }
     for (final m in game.mud) {
       _mud(canvas, m, t);
     }
@@ -95,17 +141,32 @@ class GamePainter extends CustomPainter {
     for (var j = 0; j < game.maze.gateCount; j++) {
       _gate(canvas, j);
     }
+    for (final a in game.airlocks) {
+      _airlock(canvas, a, t);
+    }
+    for (final l in game.lasers) {
+      _laser(canvas, l, t);
+    }
+    for (final cam in game.cameras) {
+      _camera(canvas, cam, t);
+    }
     for (final h in game.hazards) {
       _hazard(canvas, h, t);
     }
+    for (final f in game.fog) {
+      _fog(canvas, f, t);
+    }
     for (final c in game.creatures) {
-      if (game.config.world == WorldKind.forest) {
+      if (game.config.world == WorldKind.graveyard) {
+        _ghost(canvas, c, t);
+      } else if (game.config.world == WorldKind.forest) {
         c.asleep ? _sleepingWolf(canvas, c, t) : _wolf(canvas, c);
       } else {
         _drone(canvas, c, t);
       }
     }
     if (game.config.world == WorldKind.forest ||
+        game.config.world == WorldKind.graveyard ||
         game.config.world == WorldKind.city) {
       _noiseRing(canvas);
     }
@@ -121,7 +182,9 @@ class GamePainter extends CustomPainter {
 
     if (theme.dark) {
       // Only the surroundings of the ball are lit.
-      final center = size.center(Offset.zero);
+      final center = maze is RectMaze
+          ? origin + game.pos * s
+          : size.center(Offset.zero);
       canvas.drawRect(
         Offset.zero & size,
         Paint()
@@ -181,6 +244,34 @@ class GamePainter extends CustomPainter {
   }
 
   void _goal(Canvas c, double t) {
+    final m = game.maze;
+    if (m is RectMaze) {
+      _exitMarker(c, t, Offset(m.goalCol + 0.5, m.rows.toDouble()));
+      return;
+    }
+    final at = m.cellCenter(m.goal);
+    c.save();
+    c.translate(at.dx, at.dy);
+    _goalMarker(c, t);
+    c.restore();
+  }
+
+  /// The exit in the bottom wall: a soft golden glow in the gap.
+  void _exitMarker(Canvas c, double t, Offset gap) {
+    final pulse = 0.5 + 0.5 * sin(t * 2.5);
+    final glow = gap.translate(0, -0.35);
+    c.drawCircle(
+      glow,
+      1.1,
+      Paint()
+        ..shader = ui.Gradient.radial(glow, 1.1, [
+          Palette.gold.withValues(alpha: 0.5 + 0.2 * pulse),
+          Palette.gold.withValues(alpha: 0),
+        ]),
+    );
+  }
+
+  void _goalMarker(Canvas c, double t) {
     final pulse = 0.5 + 0.5 * sin(t * 2.5);
     c.drawCircle(
       Offset.zero,
@@ -209,6 +300,10 @@ class GamePainter extends CustomPainter {
   /// metal pad in the city.
   void _button(Canvas c, int j) {
     final p = game.maze.cellCenter(game.maze.buttonCells[j]);
+    c.save();
+    c.translate(p.dx, p.dy);
+    c.scale(kItemScale);
+    c.translate(-p.dx, -p.dy);
     final used = game.buttonUsed[j];
     final t = _clock();
     final r = used ? 0.3 : 0.34;
@@ -317,13 +412,70 @@ class GamePainter extends CustomPainter {
           0.07,
           Paint()..color = used ? const Color(0xFF3DDC84) : Color.lerp(const Color(0xFFB71C1C), Colors.redAccent, 0.5 + 0.5 * sin(t * 5))!,
         );
+      case WorldKind.graveyard:
+        // A stone slab with a cross, and a candle that burns until pressed.
+        disc(r + 0.03, const Color(0xFF2A2F3A), const Color(0xFF171A21));
+        disc(r - 0.03, const Color(0xFF9AA0AE), const Color(0xFF5E6472));
+        final cross = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.06
+          ..strokeCap = StrokeCap.round
+          ..color = dim(const Color(0xFF3A3F4B));
+        c.drawLine(p.translate(0, -0.17), p.translate(0, 0.17), cross);
+        c.drawLine(p.translate(-0.11, -0.05), p.translate(0.11, -0.05), cross);
+        if (!used) {
+          final flick = 0.8 + 0.2 * sin(t * 9 + j);
+          c.drawCircle(
+            p.translate(0, -0.2),
+            0.16 * flick,
+            Paint()
+              ..shader = ui.Gradient.radial(p.translate(0, -0.2), 0.16 * flick, [
+                const Color(0xFFFFC857).withValues(alpha: 0.6),
+                const Color(0xFFFFC857).withValues(alpha: 0),
+              ]),
+          );
+          c.drawCircle(p.translate(0, -0.2), 0.045, Paint()..color = const Color(0xFFFFE9A8));
+        }
+      case WorldKind.space:
+        final glow = used ? 0.0 : 0.5 + 0.5 * sin(t * 4 + j);
+        c.drawCircle(
+          p,
+          r + 0.3,
+          Paint()
+            ..shader = ui.Gradient.radial(p, r + 0.3, [
+              const Color(0xFF45C4F2).withValues(alpha: 0.4 * glow),
+              const Color(0xFF45C4F2).withValues(alpha: 0),
+            ]),
+        );
+        disc(r + 0.03, const Color(0xFF1B2233), const Color(0xFF0E1320));
+        disc(r - 0.03, const Color(0xFF3C4A6A), const Color(0xFF222C44));
+        // A glowing hexagon with a light in the middle.
+        final hex = Path();
+        for (var i = 0; i < 6; i++) {
+          final q = p + polar(0.2, i * pi / 3);
+          i == 0 ? hex.moveTo(q.dx, q.dy) : hex.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(
+          hex..close(),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.05
+            ..strokeJoin = StrokeJoin.round
+            ..color = used ? const Color(0xFF2E3A52) : const Color(0xFF45C4F2),
+        );
+        disc(0.08, const Color(0xFF9BE8FF), const Color(0xFF2E8CB0));
     }
     c.drawCircle(p, r + 0.03, ring);
+    c.restore();
   }
 
   /// Bonus pickup: a pulsing golden orb with a symbol for what it does.
   void _bonus(Canvas c, Offset p, double t) {
     final pulse = 0.5 + 0.5 * sin(t * 3 + p.dx);
+    c.save();
+    c.translate(p.dx, p.dy);
+    c.scale(0.8);
+    c.translate(-p.dx, -p.dy);
     c.drawCircle(
       p,
       0.7,
@@ -380,7 +532,24 @@ class GamePainter extends CustomPainter {
         // Power symbol: drones off.
         c.drawArc(Rect.fromCircle(center: p, radius: 0.13), -pi / 2 + 0.6, 2 * pi - 1.2, false, line);
         c.drawLine(p.translate(0, -0.15), p.translate(0, -0.02), line);
+      case WorldKind.graveyard:
+        // A drop of holy water.
+        final drop = Path()
+          ..moveTo(p.dx, p.dy - 0.17)
+          ..quadraticBezierTo(p.dx + 0.15, p.dy + 0.02, p.dx, p.dy + 0.15)
+          ..quadraticBezierTo(p.dx - 0.15, p.dy + 0.02, p.dx, p.dy - 0.17)
+          ..close();
+        c.drawPath(drop, line);
+        c.drawLine(p.translate(0, -0.03), p.translate(0, 0.09), line);
+        c.drawLine(p.translate(-0.05, 0.02), p.translate(0.05, 0.02), line);
+      case WorldKind.space:
+        // Crosshair: the stabilizer holds the ball steady.
+        c.drawCircle(p, 0.1, line);
+        for (var i = 0; i < 4; i++) {
+          c.drawLine(p + polar(0.1, i * pi / 2), p + polar(0.19, i * pi / 2), line);
+        }
     }
+    c.restore();
   }
 
   /// How far the ball can be heard right now, green when quiet, red when loud.
@@ -418,10 +587,11 @@ class GamePainter extends CustomPainter {
     if (a >= 1) return;
     final path = render.gates[j];
     final fade = 1 - a;
-    final w = 0.3 * (1 - 0.6 * a);
+    // Thinner than the walls it sits between, and not reaching into them.
+    final w = 0.18 * (1 - 0.6 * a);
     Paint stroke(Color color, double width) => Paint()
       ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
+      ..strokeCap = StrokeCap.butt
       ..strokeWidth = width
       ..color = color.withValues(alpha: color.a * fade);
     c.drawPath(path.shift(const Offset(0.05, 0.08)),
@@ -437,6 +607,257 @@ class GamePainter extends CustomPainter {
         final n = Offset(-tan.vector.dy, tan.vector.dx) * (w * 0.45);
         c.drawLine(tan.position - n, tan.position + n, bar);
       }
+    }
+  }
+
+  // ---- graveyard --------------------------------------------------------
+
+  /// A ghost: a pale sheet with a wavy hem. Asleep it is faint and low; driven
+  /// off by holy water it turns blue and flickers.
+  void _ghost(Canvas c, Creature g, double t) {
+    final fleeing = g.lockLeft > 0;
+    final alpha = g.asleep && !fleeing
+        ? 0.3
+        : fleeing
+            ? 0.45 + 0.2 * sin(t * 20)
+            : 0.85;
+    final bob = g.asleep && !fleeing ? 0.0 : sin(t * 3 + g.phase) * 0.05;
+    final p = g.pos.translate(0, bob);
+    final body = fleeing ? const Color(0xFFBFE6FF) : const Color(0xFFF1F4FF);
+    const w = 0.24;
+    final path = Path()..moveTo(p.dx - w, p.dy + 0.2);
+    path.lineTo(p.dx - w, p.dy - 0.05);
+    path.arcToPoint(Offset(p.dx + w, p.dy - 0.05),
+        radius: const Radius.circular(w), clockwise: true);
+    path.lineTo(p.dx + w, p.dy + 0.2);
+    // The wavy hem.
+    for (var i = 0; i < 4; i++) {
+      final x0 = p.dx + w - i * (2 * w / 4);
+      final x1 = p.dx + w - (i + 1) * (2 * w / 4);
+      final lift = (i.isEven ? -0.07 : 0.0) + sin(t * 5 + i) * 0.015;
+      path.quadraticBezierTo((x0 + x1) / 2, p.dy + 0.2 + lift * 2, x1, p.dy + 0.2);
+    }
+    path.close();
+    c.drawPath(path.shift(const Offset(0.04, 0.07)),
+        Paint()..color = Colors.black.withValues(alpha: 0.25 * alpha));
+    c.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.06
+        ..strokeJoin = StrokeJoin.round
+        ..color = Palette.ink.withValues(alpha: alpha),
+    );
+    c.drawPath(
+      path,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          p.translate(0, -0.3),
+          p.translate(0, 0.25),
+          [body.withValues(alpha: alpha), body.withValues(alpha: alpha * 0.55)],
+        ),
+    );
+    final eye = Paint()..color = const Color(0xFF1B2433).withValues(alpha: alpha);
+    if (g.asleep && !fleeing) {
+      // Closed eyes.
+      for (final dx in [-0.09, 0.09]) {
+        c.drawLine(p.translate(dx - 0.04, -0.04), p.translate(dx + 0.04, -0.04),
+            Paint()..color = eye.color..strokeWidth = 0.03..strokeCap = StrokeCap.round);
+      }
+    } else {
+      c.drawOval(Rect.fromCenter(center: p.translate(-0.09, -0.04), width: 0.07, height: 0.11), eye);
+      c.drawOval(Rect.fromCenter(center: p.translate(0.09, -0.04), width: 0.07, height: 0.11), eye);
+      c.drawOval(Rect.fromCenter(center: p.translate(0, 0.08), width: 0.07, height: 0.09), eye);
+    }
+  }
+
+  /// Cold fog: soft drifting clouds. They only slow the ball, so they are
+  /// light, and they do not hide the walls.
+  void _fog(Canvas c, MudPatch f, double t) {
+    for (var i = 0; i < 4; i++) {
+      final a = t * 0.25 + i * pi / 2 + f.pos.dx;
+      final at = f.pos + polar(f.radius * 0.28, a);
+      final r = f.radius * (0.72 + 0.12 * sin(t * 0.7 + i));
+      c.drawCircle(
+        at,
+        r,
+        Paint()
+          ..shader = ui.Gradient.radial(at, r, [
+            const Color(0xFFDDE8FF).withValues(alpha: 0.34),
+            const Color(0xFFB9CCF2).withValues(alpha: 0.18),
+            const Color(0xFFB9CCF2).withValues(alpha: 0),
+          ], const [0, 0.55, 1]),
+      );
+    }
+  }
+
+  /// A grave that caves in: a headstone while the ground cracks and shakes,
+  /// then an open pit.
+  void _grave(Canvas c, Hazard h, double t, double fadeOut) {
+    final scale = 0.8;
+    c.save();
+    c.translate(h.pos.dx, h.pos.dy);
+    c.scale(scale);
+    if (!h.armed) {
+      final k = (h.age / h.armAt).clamp(0.0, 1.0);
+      final shake = sin(t * 40) * 0.025 * k;
+      // The mound, with cracks that spread.
+      c.drawOval(Rect.fromCenter(center: const Offset(0, 0.06), width: 0.62, height: 0.34),
+          Paint()..color = const Color(0xFF4A3B2C));
+      final crack = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.03
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFF140C06);
+      for (var i = 0; i < 5; i++) {
+        final a = i * 2 * pi / 5 + 0.4;
+        c.drawLine(const Offset(0, 0.06), Offset.zero.translate(cos(a) * 0.28 * k, 0.06 + sin(a) * 0.15 * k), crack);
+      }
+      // The headstone, trembling.
+      final stone = RRect.fromRectAndCorners(
+        Rect.fromCenter(center: Offset(shake, -0.12), width: 0.3, height: 0.36),
+        topLeft: const Radius.circular(0.15),
+        topRight: const Radius.circular(0.15),
+      );
+      c.drawRRect(stone.inflate(0.035), Paint()..color = Palette.ink);
+      c.drawRRect(stone, Paint()..color = const Color(0xFFA9AFBC));
+      final rip = Paint()..color = const Color(0xFF5E6472)..strokeWidth = 0.035..strokeCap = StrokeCap.round;
+      c.drawLine(Offset(shake, -0.24), Offset(shake, -0.04), rip);
+      c.drawLine(Offset(shake - 0.07, -0.17), Offset(shake + 0.07, -0.17), rip);
+    } else {
+      // The ground has fallen in.
+      c.drawOval(Rect.fromCenter(center: Offset.zero, width: 0.86, height: 0.6),
+          Paint()..color = const Color(0xFF3A2A1A).withValues(alpha: fadeOut));
+      c.drawOval(Rect.fromCenter(center: const Offset(0, 0.02), width: 0.7, height: 0.46),
+          Paint()..color = const Color(0xFF0B0704).withValues(alpha: fadeOut));
+      c.drawOval(Rect.fromCenter(center: const Offset(0, 0.06), width: 0.34, height: 0.2),
+          Paint()..color = Colors.black.withValues(alpha: fadeOut));
+    }
+    c.restore();
+  }
+
+  // ---- spaceship --------------------------------------------------------
+
+  /// A security camera: its view cone, cut short by the walls, turning from
+  /// pale blue to red as it makes up its mind, and the camera itself, turned
+  /// to where it looks.
+  void _camera(Canvas c, SecurityCamera cam, double t) {
+    final angle = game.cameraAngle(cam);
+    final k = (cam.alert / GameController.cameraReaction).clamp(0.0, 1.0);
+    const rays = 14;
+    final cone = Path()..moveTo(cam.pos.dx, cam.pos.dy);
+    for (var i = 0; i <= rays; i++) {
+      final a = angle - GameController.cameraHalfAngle +
+          2 * GameController.cameraHalfAngle * i / rays;
+      final d = game.sightDistance(cam.pos, a, GameController.cameraRange);
+      final q = cam.pos + polar(d, a);
+      cone.lineTo(q.dx, q.dy);
+    }
+    cone.close();
+    final tint = Color.lerp(const Color(0xFF7DF9FF), const Color(0xFFFF3B3B), k)!;
+    c.drawPath(
+      cone,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          cam.pos,
+          GameController.cameraRange,
+          [tint.withValues(alpha: 0.5), tint.withValues(alpha: 0.06)],
+        ),
+    );
+
+    c.save();
+    c.translate(cam.pos.dx, cam.pos.dy);
+    c.drawCircle(const Offset(0.03, 0.06), 0.19, Paint()..color = Colors.black.withValues(alpha: 0.35));
+    c.drawCircle(Offset.zero, 0.19, Paint()..color = Palette.ink);
+    c.drawCircle(Offset.zero, 0.15, Paint()..color = const Color(0xFF59627A));
+    c.rotate(angle);
+    // The housing, with the lens in front.
+    final housing = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: const Offset(0.03, 0), width: 0.36, height: 0.2),
+        const Radius.circular(0.06));
+    c.drawRRect(housing.inflate(0.03), Paint()..color = Palette.ink);
+    c.drawRRect(
+      housing,
+      Paint()
+        ..shader = ui.Gradient.linear(const Offset(0, -0.1), const Offset(0, 0.1),
+            const [Color(0xFFDDE5F2), Color(0xFF7C88A3)]),
+    );
+    c.drawCircle(const Offset(0.2, 0), 0.075, Paint()..color = Palette.ink);
+    c.drawCircle(const Offset(0.2, 0), 0.055, Paint()..color = tint);
+    c.drawCircle(const Offset(0.185, -0.018), 0.018, Paint()..color = Colors.white);
+    c.restore();
+    final blink = sin(t * 6 + cam.phase) > 0.2;
+    c.drawCircle(cam.pos.translate(-0.06, -0.06), 0.03,
+        Paint()..color = (blink || k > 0 ? const Color(0xFFFF3B3B) : const Color(0xFF5A1E1E)));
+  }
+
+  /// A laser across the corridor: emitters in the walls, a thin blinking line
+  /// as a warning, then the burning beam.
+  void _laser(Canvas c, Laser l, double t) {
+    final phase = game.laserPhase(l);
+    final perp = Offset(-l.along.dy, l.along.dx);
+    final a = l.center - perp * 0.5;
+    final b = l.center + perp * 0.5;
+    Paint line(Color color, double width) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..strokeWidth = width
+      ..color = color;
+    const red = Color(0xFFFF3B3B);
+    if (phase == 2) {
+      c.drawLine(a, b, line(red.withValues(alpha: 0.3), 0.4));
+      c.drawLine(a, b, line(red, 0.14));
+      c.drawLine(a, b, line(Colors.white, 0.05));
+    } else if (phase == 1) {
+      final on = sin(t * 18) > 0;
+      c.drawLine(a, b, line(red.withValues(alpha: on ? 0.85 : 0.25), 0.04));
+    } else {
+      c.drawLine(a, b, line(red.withValues(alpha: 0.14), 0.025));
+    }
+    for (final e in [a, b]) {
+      c.drawCircle(e, 0.095, Paint()..color = Palette.ink);
+      c.drawCircle(e, 0.07, Paint()..color = phase == 0 ? const Color(0xFF6A3A3A) : red);
+    }
+  }
+
+  /// An airlock door: a shut one is a striped metal bar across the corridor;
+  /// an open one is only the two panels in the walls, with a green light (amber
+  /// and blinking just before it shuts).
+  void _airlock(Canvas c, Airlock a, double t) {
+    final phase = game.airlockPhase(a);
+    final perp = Offset(-a.along.dy, a.along.dx);
+    final p1 = a.center - perp * 0.5;
+    final p2 = a.center + perp * 0.5;
+    Paint line(Color color, double width, [StrokeCap cap = StrokeCap.butt]) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = cap
+      ..strokeWidth = width
+      ..color = color;
+    if (phase == 2) {
+      c.drawLine(p1 + const Offset(0.04, 0.07), p2 + const Offset(0.04, 0.07),
+          line(Colors.black.withValues(alpha: 0.35), 0.26));
+      c.drawLine(p1, p2, line(Palette.ink, 0.26));
+      c.drawLine(p1, p2, line(const Color(0xFF8995AA), 0.2));
+      // Hazard stripes across the door.
+      for (var d = 0.06; d < 0.94; d += 0.16) {
+        final s = p1 + (p2 - p1) * d;
+        c.drawLine(s, s + (p2 - p1) * 0.08, line(const Color(0xFFFFC107), 0.2));
+      }
+    } else {
+      final amber = phase == 1;
+      final blink = !amber || sin(t * 16) > 0;
+      for (final e in [(p1, p2), (p2, p1)]) {
+        final end = e.$1 + (e.$2 - e.$1) * 0.16;
+        c.drawLine(e.$1, end, line(Palette.ink, 0.24));
+        c.drawLine(e.$1, end, line(const Color(0xFF8995AA), 0.17));
+      }
+      if (amber) {
+        // A ghost of the door about to close.
+        c.drawLine(p1, p2, line(const Color(0xFFFFC107).withValues(alpha: blink ? 0.35 : 0.1), 0.1));
+      }
+      final led = amber ? const Color(0xFFFFB300) : const Color(0xFF3DDC84);
+      c.drawCircle(a.center, 0.065, Paint()..color = Palette.ink);
+      c.drawCircle(a.center, 0.045, Paint()..color = blink ? led : led.withValues(alpha: 0.3));
     }
   }
 
@@ -466,6 +887,10 @@ class GamePainter extends CustomPainter {
         c.drawCircle(h.pos.translate(-0.1, -0.1), 0.2,
             Paint()..color = const Color(0xFFA2A7AC).withValues(alpha: fadeOut));
       }
+      return;
+    }
+    if (game.config.world == WorldKind.graveyard) {
+      _grave(c, h, t, fadeOut);
       return;
     }
     // Spikes pop out of the ground.

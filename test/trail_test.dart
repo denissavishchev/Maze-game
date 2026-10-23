@@ -18,7 +18,7 @@ void main() {
     for (final kind in BallKind.values) {
       for (var level = 1; level <= 5; level++) {
         final g = make(kind, level: level);
-        final m = g.maze;
+        final m = g.maze as PolarMaze;
         final n = m.sectors.last;
         final t0 = m.entrance * 2 * pi / n;
         final t1 = (m.entrance + 1) * 2 * pi / n;
@@ -50,7 +50,7 @@ void main() {
   test('the ball can still roll out of the maze and back in through the trail', () {
     for (var level = 1; level <= 5; level++) {
       final g = make(BallKind.stone, level: level); // the widest ball
-      final m = g.maze;
+      final m = g.maze as PolarMaze;
       final out = g.pos / g.pos.distance;
       g.started = true;
       expect(g.pos, m.cellCenter(m.start));

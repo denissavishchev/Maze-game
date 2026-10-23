@@ -12,8 +12,10 @@ enum Sound {
   impactRubber,
   impactGlass,
   impactStone,
+  impactSlime,
   wolfWake,
   droneWake,
+  ghostWake,
 }
 
 /// Small synthesised sound effects, so the game needs no audio files.
@@ -120,6 +122,16 @@ class Sfx {
           low += (noise() - low) * 0.12;
           return (low * 2.2 * env(t, 24) + sine(95, t) * 0.7 * env(t, 22));
         });
+      case Sound.impactSlime:
+        // A wet squelch: a low blob whose pitch dips, with a soft smack.
+        var wet = 0.0;
+        return render(0.22, (t) {
+          wet += (noise() - wet) * 0.25;
+          final f = 130 - 55 * (t / 0.22) + sin(2 * pi * 30 * t) * 12;
+          return (sine(f, t) * 0.8 + wet * 0.9 * env(t, 45)) *
+              (1 - exp(-t * 500)) *
+              env(t, 18);
+        });
       case Sound.wolfWake:
         // A low growl: a rising throaty tone with a fast tremble and rasp.
         return render(1.0, (t) {
@@ -128,6 +140,14 @@ class Sfx {
           final tremble = 0.65 + 0.35 * sin(2 * pi * 24 * t);
           final shape = (1 - exp(-t * 14)) * exp(-pow(max(0, t - 0.55), 2) * 14);
           return (tone * 0.45 + noise() * 0.18) * tremble * shape;
+        });
+      case Sound.ghostWake:
+        // A thin wail that rises and falls, with a ripple of breath.
+        return render(1.1, (t) {
+          final f = 340 + 220 * sin(pi * t / 1.1) + sin(2 * pi * 6 * t) * 14;
+          final tone = sine(f, t) + 0.35 * sine(2 * f, t);
+          final shape = sin(pi * (t / 1.1).clamp(0.0, 1.0));
+          return (tone * 0.5 + noise() * 0.07) * shape * 0.8;
         });
       case Sound.droneWake:
         // Rotors spinning up, then two beeps.

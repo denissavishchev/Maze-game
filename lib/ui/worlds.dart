@@ -4,13 +4,13 @@ import '../game/world.dart';
 import '../l10n/strings.dart';
 
 /// What is scattered around the outside of the maze.
-enum Scenery { trees, swamp, snowPines, crystals, houses }
+enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard }
 
 /// How the walls are drawn.
-enum WallStyle { hedge, mossRock, snowRock, brick, castle }
+enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull }
 
 /// How the floor is drawn.
-enum FloorStyle { sand, flagstone, cobble }
+enum FloorStyle { sand, flagstone, cobble, deck }
 
 class WorldTheme {
   const WorldTheme({
@@ -159,6 +159,40 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
           panelBottom: Color(0xEE393126),
           accent: Color(0xFFDA6A4C),
         ),
+      WorldKind.space => const WorldTheme(
+          id: 'space',
+          icon: Icons.rocket_launch_rounded,
+          bg: Color(0xFF0A0E1C),
+          floor: Color(0xFF5B6881),
+          floorDark: Color(0xFF3F4A62),
+          wallBase: Color(0xFF161C2C),
+          wallMain: Color(0xFF8DA0BD),
+          wallHi: Color(0xFFE6F3FF),
+          gate: Color(0xFF45C4F2),
+          scenery: Scenery.space,
+          wallStyle: WallStyle.hull,
+          floorStyle: FloorStyle.deck,
+          panelTop: Color(0xEE24304D),
+          panelBottom: Color(0xEE111930),
+          accent: Color(0xFF4FC3F7),
+        ),
+      WorldKind.graveyard => const WorldTheme(
+          id: 'graveyard',
+          icon: Icons.nightlight_round,
+          bg: Color(0xFF1B2433),
+          floor: Color(0xFF7A7C6E),
+          floorDark: Color(0xFF5B5E52),
+          wallBase: Color(0xFF232A36),
+          wallMain: Color(0xFF8C93A3),
+          wallHi: Color(0xFFD7DCEA),
+          gate: Color(0xFF8E6BBF),
+          scenery: Scenery.graveyard,
+          wallStyle: WallStyle.castle,
+          floorStyle: FloorStyle.flagstone,
+          panelTop: Color(0xEE3A3550),
+          panelBottom: Color(0xEE1B1A2C),
+          accent: Color(0xFFB39DDB),
+        ),
     };
 
 /// Level-specific numbers for the select screen.
@@ -174,6 +208,9 @@ String hazardNote(GameConfig c) {
     WorldKind.mud => n == 1
         ? tr('note.trap.one', {'s': trapEvery})
         : tr('note.trap.many', {'n': n, 's': trapEvery}),
+    WorldKind.graveyard =>
+      tr('note.graveyard', {'n': k, 's': trapEvery}),
+    WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1
         ? tr('note.boulder.one', {'s': boulderEvery})
         : tr('note.boulder.many', {'n': n, 's': boulderEvery}),

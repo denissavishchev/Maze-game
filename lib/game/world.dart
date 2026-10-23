@@ -1,14 +1,15 @@
 import '../l10n/strings.dart';
 import 'ball.dart';
 
-enum WorldKind { forest, mud, mountains, underground, city }
+enum WorldKind { forest, mud, mountains, underground, city, space, graveyard }
 
 /// A chosen world and one of five levels. The level sets everything that
 /// makes the game harder: maze size, number of buttons (and gates), number of
 /// wolves / drones, number of traps and how fast they come, how far the
 /// underground light reaches.
 class GameConfig {
-  const GameConfig(this.world, this.level, {this.ball = BallKind.wood});
+  const GameConfig(this.world, this.level,
+      {this.ball = BallKind.wood, this.bonuses});
 
   static const int minLevel = 1;
   static const int maxLevel = 5;
@@ -36,8 +37,11 @@ class GameConfig {
   /// Seconds between trap spawns.
   double get trapInterval => _pick(const [2.8, 2.4, 2.1, 1.8, 1.6]);
 
+  /// Endless mode decides itself how many bonuses a level holds.
+  final int? bonuses;
+
   /// Bonuses lying on the map: as many as there are traps.
-  int get bonusCount => trapCount;
+  int get bonusCount => bonuses ?? trapCount;
 
   /// Mud: seconds to sink completely when stuck in a bog.
   double get bogSeconds => _pick(const [4.0, 3.4, 2.9, 2.5, 2.1]);
@@ -59,6 +63,30 @@ class GameConfig {
 
   /// Chaser speed in maze units per second.
   double get chaserSpeed => 1.1 + 0.2 * (level - minLevel);
+
+  /// Graveyard: patches of cold fog that slow the ball.
+  int get fogCount => _pick(const [3, 4, 5, 6, 7]);
+
+  /// Spaceship: lasers sweeping corridors.
+  int get laserCount => _pick(const [2, 2, 3, 3, 4]);
+
+  /// Spaceship: airlock doors that open and close on a timer.
+  int get airlockCount => _pick(const [1, 1, 2, 2, 3]);
+
+  /// Spaceship: security cameras that sweep their view back and forth.
+  int get cameraCount => _pick(const [2, 2, 4, 4, 6]);
+
+  /// Spaceship: seconds a camera takes to sweep there and back.
+  double get cameraPeriod => _pick(const [6.0, 5.5, 5.0, 4.5, 4.0]);
+
+  /// Spaceship: seconds from one laser pulse to the next.
+  double get laserPeriod => _pick(const [4.2, 4.0, 3.6, 3.3, 3.0]);
+
+  /// Spaceship: pull of the changing gravity, in units per second squared.
+  double get gravityStrength => _pick(const [2.6, 3.0, 3.4, 3.9, 4.4]);
+
+  /// Spaceship: seconds between changes of the gravity's direction.
+  double get gravityInterval => _pick(const [7.0, 6.5, 6.0, 5.5, 5.0]);
 
   /// Underground: how far the ball lights the way.
   double get lightRadius => _pick(const [3.6, 3.2, 2.9, 2.6, 2.3]);

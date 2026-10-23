@@ -3,12 +3,13 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maze/audio/haptics.dart';
 import 'package:maze/game/game_controller.dart';
+import 'package:maze/game/polar_maze.dart';
 import 'package:maze/game/world.dart';
 
 List<Haptic> hitWall(double speed, {int frames = 40}) {
   final g = GameController(const GameConfig(WorldKind.forest, 3),
       hazardsEnabled: false, seed: 4);
-  final m = g.maze;
+  final m = g.maze as PolarMaze;
   final n = m.sectors.last;
   final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n;
   final out = Offset(cos(theta), sin(theta));
@@ -43,7 +44,7 @@ void main() {
   test('pressing against a wall does not buzz every frame', () {
     final g = GameController(const GameConfig(WorldKind.forest, 3),
         hazardsEnabled: false, seed: 4);
-    final m = g.maze;
+    final m = g.maze as PolarMaze;
     final n = m.sectors.last;
     final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n;
     final out = Offset(cos(theta), sin(theta));

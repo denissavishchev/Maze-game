@@ -15,10 +15,13 @@ void main() {
       ));
       await tester.pump(const Duration(milliseconds: 300));
       final hasNoise = find.text(tr('meter.noise')).evaluate().isNotEmpty;
-      expect(hasNoise, world == WorldKind.forest || world == WorldKind.city,
+      expect(
+          hasNoise,
+          world == WorldKind.forest || world == WorldKind.city || world == WorldKind.graveyard,
           reason: '${world.name}: noise bar');
-      // The calibration button is captioned, so it is clear what it does.
-      expect(find.text(tr('cal.label')), findsOneWidget, reason: '${world.name}: calibrate caption');
+      // The calibration button sits in the top bar.
+      expect(find.byIcon(Icons.screen_rotation_alt_rounded), findsOneWidget,
+          reason: '${world.name}: calibrate button');
       // The sinking is shown on the ball itself; there is no bar for it.
       expect(find.byType(LinearProgressIndicator), findsNothing);
       // Leave the game screen so its ticker stops before the next world.

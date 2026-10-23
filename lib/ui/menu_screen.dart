@@ -1,11 +1,16 @@
+import 'dart:math';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../game/ball.dart';
+import '../game/rect_maze.dart';
 import '../game/game_controller.dart';
 import '../game/world.dart';
 import '../l10n/strings.dart';
 import 'balls.dart';
 import 'game_screen.dart';
+import 'maze_art.dart';
 import 'kit.dart';
 import 'palette.dart';
 import 'worlds.dart';
@@ -24,8 +29,13 @@ const Map<WorldKind, (Offset, double)> _worldCrops = {
 /// Second screen: pick the world, the ball and the size of the maze, then
 /// play. Worlds and balls are rows of five buttons with one description
 /// underneath that follows the selection, which keeps everything on one screen.
+///
+/// In [endless] mode there is no world or size to pick: the screen explains the
+/// mode and offers only the ball.
 class SelectScreen extends StatefulWidget {
-  const SelectScreen({super.key});
+  const SelectScreen({super.key, this.endless = false});
+
+  final bool endless;
 
   @override
   State<SelectScreen> createState() => _SelectScreenState();
@@ -60,17 +70,24 @@ class _SelectScreenState extends State<SelectScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _label(tr('sel.world')),
-                    _worldRow(),
-                    _worldDescription(),
-                    const SizedBox(height: 12),
+                    if (widget.endless) ...[
+                      _endlessDescription(),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      _label(tr('sel.world')),
+                      _worldRow(),
+                      _worldDescription(),
+                      const SizedBox(height: 12),
+                    ],
                     _label(tr('sel.ball')),
                     _ballRow(),
                     _ballDescription(),
                     const SizedBox(height: 12),
-                    _label(tr('sel.size')),
-                    _sizePicker(),
-                    const SizedBox(height: 12),
+                    if (!widget.endless) ...[
+                      _label(tr('sel.size')),
+                      _sizePicker(),
+                      const SizedBox(height: 12),
+                    ],
                     // Back (left) and play (right) share one row at the bottom.
                     Row(
                       children: [
@@ -90,7 +107,12 @@ class _SelectScreenState extends State<SelectScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 13),
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => GameScreen(config: config),
+                                builder: (_) => GameScreen(
+                                  config: widget.endless
+                                      ? GameController.endlessConfig(0, ball)
+                                      : config,
+                                  endless: widget.endless,
+                                ),
                               ),
                             ),
                           ),
@@ -187,8 +209,27 @@ class _SelectScreenState extends State<SelectScreen> {
         ),
       );
 
-  Widget _worldRow() => Row(
+  /// Tiles in rows of [perRow]; the last row is padded so the tiles all keep
+  /// the same size.
+  static const int perRow = 5;
+
+  Widget _grid(List<Widget> tiles) => Column(
         children: [
+          for (var i = 0; i < tiles.length; i += perRow)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+              child: Row(
+                children: [
+                  ...tiles.skip(i).take(perRow),
+                  for (var k = tiles.length - i; k < perRow; k++)
+                    const Expanded(child: SizedBox()),
+                ],
+              ),
+            ),
+        ],
+      );
+
+  Widget _worldRow() => _grid([
           for (final w in WorldKind.values)
             _tile(
               selected: w == world,
@@ -199,15 +240,43 @@ class _SelectScreenState extends State<SelectScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Palette.ink, width: 2),
                 ),
-                child: ArtCrop(
-                  center: _worldCrops[w]!.$1,
-                  width: _worldCrops[w]!.$2,
-                  size: 48,
-                  radius: 10,
-                ),
+                // The key art lacks some worlds: they get a piece of their own
+                // level instead.
+                child: _worldCrops[w] == null
+                    ? _WorldThumb(w)
+                    : ArtCrop(
+                        center: _worldCrops[w]!.$1,
+                        width: _worldCrops[w]!.$2,
+                        size: 48,
+                        radius: 10,
+                      ),
               ),
             ),
-        ],
+      ]);
+
+  /// What the endless mode is and how its levels follow one another.
+  Widget _endlessDescription() => MossPanel(
+        colors: themeFor(world).panel,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.all_inclusive_rounded, color: Palette.gold, size: 22),
+                const SizedBox(width: 8),
+                Flexible(child: Text(tr('endless.title'), style: cartoon(18, outline: 1.5))),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(tr('endless.desc'),
+                style: const TextStyle(color: Palette.cream, fontSize: 12.5)),
+            const SizedBox(height: 6),
+            Text(tr('endless.rules'),
+                style: const TextStyle(
+                    color: Color(0xFF8FFBFF), fontSize: 12, fontWeight: FontWeight.w800)),
+          ],
+        ),
       );
 
   Widget _worldDescription() {
@@ -235,17 +304,15 @@ class _SelectScreenState extends State<SelectScreen> {
     );
   }
 
-  Widget _ballRow() => Row(
-        children: [
-          for (final b in BallKind.values)
-            _tile(
-              selected: b == ball,
-              onTap: () => setState(() => ball = b),
-              name: infoOf(b).name,
-              child: BallBubble(kind: b, size: 42),
-            ),
-        ],
-      );
+  Widget _ballRow() => _grid([
+        for (final b in BallKind.values)
+          _tile(
+            selected: b == ball,
+            onTap: () => setState(() => ball = b),
+            name: infoOf(b).name,
+            child: BallBubble(kind: b, size: 42),
+          ),
+      ]);
 
   Widget _ballDescription() {
     final info = infoOf(ball);
@@ -333,4 +400,87 @@ class _SelectScreenState extends State<SelectScreen> {
       ),
     );
   }
+}
+
+/// A small piece of a world's level, for the worlds the key art does not show:
+/// the maze drawn in the world's colours with one of its dangers on it.
+class _WorldThumb extends StatelessWidget {
+  const _WorldThumb(this.world);
+
+  final WorldKind world;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 48,
+        height: 48,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CustomPaint(painter: _ThumbPainter(world)),
+        ),
+      );
+}
+
+class _ThumbPainter extends CustomPainter {
+  _ThumbPainter(this.world);
+
+  final WorldKind world;
+
+  static final RectMaze _maze =
+      RectMaze.generate(cols: 3, rows: 3, gates: 0, random: Random(4));
+  static final Map<WorldKind, ui.Picture> _pictures = {};
+
+  /// How much of the maze, in cells across, the thumbnail shows.
+  static const double _window = 2.6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final theme = themeFor(world);
+    final picture = _pictures.putIfAbsent(
+        world, () => buildRectMazePicture(_maze, theme, 5));
+    canvas.save();
+    canvas.scale(size.width / _window);
+    canvas.translate(-(1.5 - _window / 2), -(1.5 - _window / 2));
+    canvas.drawPicture(picture);
+    switch (world) {
+      case WorldKind.space:
+        // A laser burning across the middle of the corridor.
+        final a = const Offset(1.5, 1.0);
+        final b = const Offset(1.5, 2.0);
+        Paint beam(Color color, double width) => Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..color = color;
+        canvas.drawLine(a, b, beam(const Color(0x55FF3B3B), 0.4));
+        canvas.drawLine(a, b, beam(const Color(0xFFFF3B3B), 0.14));
+        canvas.drawLine(a, b, beam(Colors.white, 0.05));
+        for (final e in [a, b]) {
+          canvas.drawCircle(e, 0.1, Paint()..color = const Color(0xFFFF3B3B));
+        }
+      case WorldKind.graveyard:
+        // Cold fog drifting over a headstone.
+        const c = Offset(1.5, 1.5);
+        final stone = RRect.fromRectAndCorners(
+          Rect.fromCenter(center: c.translate(0, -0.05), width: 0.34, height: 0.42),
+          topLeft: const Radius.circular(0.17),
+          topRight: const Radius.circular(0.17),
+        );
+        canvas.drawRRect(stone.inflate(0.04), Paint()..color = Colors.black);
+        canvas.drawRRect(stone, Paint()..color = const Color(0xFFA9AFBC));
+        canvas.drawCircle(
+          c.translate(0.1, 0.12),
+          0.9,
+          Paint()
+            ..shader = ui.Gradient.radial(c.translate(0.1, 0.12), 0.9, [
+              const Color(0xFFDDE8FF).withValues(alpha: 0.55),
+              const Color(0xFFB9CCF2).withValues(alpha: 0),
+            ]),
+        );
+      default:
+        break;
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ThumbPainter old) => old.world != world;
 }

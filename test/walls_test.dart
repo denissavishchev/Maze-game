@@ -17,7 +17,7 @@ bool _crosses(Offset p1, Offset p2, Seg s) {
 /// The first wall (or closed gate) that the step [a] -> [b] cuts through.
 Seg? wallCut(GameController g, Offset a, Offset b) {
   if ((b - a).distance < 1e-9) return null;
-  final m = g.maze;
+  final m = g.maze as PolarMaze;
   for (var k = 0; k <= m.rings; k++) {
     for (final s in m.byRing[k]) {
       if (s.gate >= 0 && g.gateOpen[s.gate]) continue;

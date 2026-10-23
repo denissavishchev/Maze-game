@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maze/game/ball.dart';
 import 'package:maze/game/game_controller.dart';
+import 'package:maze/game/polar_maze.dart';
 import 'package:maze/game/world.dart';
 
 /// Angle in radians between two orientations.
@@ -55,7 +56,7 @@ void main() {
     for (final kind in [BallKind.wood, BallKind.glass, BallKind.stone]) {
       final g = GameController(GameConfig(WorldKind.forest, 3, ball: kind),
           hazardsEnabled: false, seed: 4);
-      final m = g.maze;
+      final m = g.maze as PolarMaze;
       final theta = (m.entrance + 0.5) * 2 * pi / m.sectors.last;
       final out = Offset(cos(theta), sin(theta));
       g.started = true;

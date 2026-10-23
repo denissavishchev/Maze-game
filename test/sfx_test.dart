@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maze/audio/sfx.dart';
 import 'package:maze/game/ball.dart';
 import 'package:maze/game/game_controller.dart';
+import 'package:maze/game/polar_maze.dart';
 import 'package:maze/game/world.dart';
 
 Sound impactOf(BallKind k) => switch (k) {
@@ -13,13 +14,14 @@ Sound impactOf(BallKind k) => switch (k) {
       BallKind.rubber => Sound.impactRubber,
       BallKind.glass => Sound.impactGlass,
       BallKind.stone => Sound.impactStone,
+      BallKind.slime => Sound.impactSlime,
     };
 
 /// Drives the ball into a stretch of closed outer wall at [speed].
 List<(Sound, double)> hitWall(BallKind kind, double speed, {int frames = 40}) {
   final g = GameController(GameConfig(WorldKind.forest, 3, ball: kind),
       hazardsEnabled: false, seed: 4);
-  final m = g.maze;
+  final m = g.maze as PolarMaze;
   final n = m.sectors.last;
   final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n;
   final out = Offset(cos(theta), sin(theta));
@@ -75,7 +77,7 @@ void main() {
   test('pressing against a wall does not rattle every frame', () {
     final g = GameController(const GameConfig(WorldKind.forest, 3),
         hazardsEnabled: false, seed: 4);
-    final m = g.maze;
+    final m = g.maze as PolarMaze;
     final n = m.sectors.last;
     final theta = ((m.entrance + n ~/ 2) % n + 0.5) * 2 * pi / n;
     final out = Offset(cos(theta), sin(theta));

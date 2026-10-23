@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import 'audio/haptics.dart';
 import 'audio/sfx.dart';
 import 'audio/sound_setting.dart';
