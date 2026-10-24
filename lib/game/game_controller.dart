@@ -110,18 +110,6 @@ class SecurityCamera {
   double alert = 0;
 }
 
-/// Glass: a mirror set into a wall. Touch it and it throws the ball to a
-/// random place in the maze.
-class Mirror {
-  Mirror(this.seg);
-
-  final Seg seg;
-  Offset get center => (seg.a + seg.b) / 2;
-
-  /// 1 right after it was used, fading to 0.
-  double flash = 0;
-}
-
 /// Glass: a spot of floor that crumbles while the ball stands on it. [level]
 /// runs from 0 (whole) to 1 (gone); [stage] is the cracking seen in 4 steps.
 class Crumble {
@@ -365,12 +353,10 @@ class GameController extends ChangeNotifier {
   List<MudPatch> fog = [];
   List<Burst> bursts = [];
 
-  /// Glass: mirrors in the walls, crumbling floor and the laser beams.
-  List<Mirror> mirrors = [];
+  /// Glass: crumbling floor and the laser beams.
   List<Crumble> cracks = [];
   List<GlassBeam> beams = [];
   double _beamTimer = 3;
-  double _mirrorCooldown = 0;
   bool _beamNoticed = false;
 
   /// Glass: slower than this and the floor starts to crumble.
@@ -520,8 +506,6 @@ class GameController extends ChangeNotifier {
     airlocks = [];
     cameras = [];
     if (config.world == WorldKind.space) _placeSpaceHazards();
-    mirrors = [];
-    if (config.world == WorldKind.glass) _placeMirrors();
     restart();
   }
 
@@ -580,38 +564,6 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Glass: mirrors on walls beside corridor cells, spread out and away from
-  /// the start.
-  void _placeMirrors() {
-    final special = {maze.start, maze.goal, ...maze.buttonCells};
-    final start = maze.cellCenter(maze.start);
-    final cells = [
-      for (var c = 1; c < maze.cellCount; c++)
-        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 2.5) c,
-    ]..shuffle(_rnd);
-    for (final c in cells) {
-      if (mirrors.length >= config.mirrorCount) break;
-      final at = maze.cellCenter(c);
-      final walls = [
-        for (final s in maze.segmentsNear(at))
-          if (s.gate < 0 && (s.b - s.a).distance > 0.4 && _distToSeg(at, s) < 0.9) s,
-      ];
-      if (walls.isEmpty) continue;
-      final seg = walls[_rnd.nextInt(walls.length)];
-      final mid = (seg.a + seg.b) / 2;
-      if (mirrors.any((m) => (m.center - mid).distance < 2.5)) continue;
-      mirrors.add(Mirror(seg));
-    }
-  }
-
-  static double _distToSeg(Offset p, Seg s) {
-    final ab = s.b - s.a;
-    final t = (((p - s.a).dx * ab.dx + (p - s.a).dy * ab.dy) /
-            (ab.dx * ab.dx + ab.dy * ab.dy))
-        .clamp(0.0, 1.0);
-    return (p - (s.a + ab * t)).distance;
-  }
-
   /// Same maze, everything back to its starting state.
   void restart() {
     gateOpen = List<bool>.filled(maze.gateCount, false);
@@ -648,11 +600,7 @@ class GameController extends ChangeNotifier {
     cracks = [];
     beams = [];
     _beamTimer = config.beamInterval;
-    _mirrorCooldown = 0;
     _beamNoticed = false;
-    for (final m in mirrors) {
-      m.flash = 0;
-    }
     for (final cam in cameras) {
       cam.alert = 0;
     }
@@ -1540,49 +1488,8 @@ class GameController extends ChangeNotifier {
 
   void _updateGlass(double dt) {
     final shielded = bonusLeft > 0;
-    _mirrorCooldown -= dt;
-    for (final m in mirrors) {
-      m.flash = max(0, m.flash - dt * 2);
-    }
-    if (!shielded && _mirrorCooldown <= 0) {
-      final reach = ballRadius + PolarMaze.wallHalf + 0.07;
-      for (final m in mirrors) {
-        if (_distToSeg(pos, m.seg) < reach) {
-          _teleport(m);
-          break;
-        }
-      }
-    }
     _crumble(dt, shielded);
     _updateBeams(dt, shielded);
-  }
-
-  /// A mirror throws the ball to a random cell, not too near and never the
-  /// exit.
-  void _teleport(Mirror m) {
-    final far = [
-      for (var c = 0; c < maze.cellCount; c++)
-        if (c != maze.goal &&
-            (maze.cellCenter(c) - pos).distance > 3 &&
-            mirrors.every((o) => (o.center - maze.cellCenter(c)).distance > 1.2))
-          c,
-    ];
-    final cells = far.isNotEmpty
-        ? far
-        : [for (var c = 0; c < maze.cellCount; c++) if (c != maze.goal) c];
-    final to = maze.cellCenter(cells[_rnd.nextInt(cells.length)]);
-    m.flash = 1;
-    bursts.add(Burst(pos, 2));
-    pos = to;
-    vel = Offset.zero;
-    camera = to;
-    bursts.add(Burst(to, 2));
-    _mirrorCooldown = 1.5;
-    cracks.clear();
-    notice = 'notice.mirror';
-    noticeArgs = const {};
-    noticeLeft = 1.8;
-    _explore();
   }
 
   /// The floor gives way under a ball that dawdles: four stages of cracking

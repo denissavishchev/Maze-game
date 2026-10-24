@@ -28,35 +28,13 @@ GameController endlessGlass() {
 }
 
 void main() {
-  test('the glass world has mirrors on walls and nothing of other worlds', () {
+  test('the glass world has no creatures, bogs or ship lasers', () {
     final g = glass();
-    expect(g.mirrors, isNotEmpty);
-    expect(g.mirrors.length, lessThanOrEqualTo(g.config.mirrorCount));
-    for (final m in g.mirrors) {
-      expect(m.seg.gate, -1);
-    }
     expect(g.lasers, isEmpty);
     expect(g.mud, isEmpty);
     expect(g.creatures, isEmpty);
     expect(g.cracks, isEmpty);
     expect(g.beams, isEmpty);
-  });
-
-  test('touching a mirror throws the ball to a far place, never the exit', () {
-    final g = glass(level: 4, seed: 9);
-    g.started = true;
-    final m = g.mirrors.first;
-    // Stand right at the mirror, just off its face.
-    final ab = m.seg.b - m.seg.a;
-    final n = Offset(-ab.dy, ab.dx) / ab.distance;
-    g.pos = m.center + n * 0.1;
-    final from = g.pos;
-    g.update(1 / 60, Offset.zero);
-    expect((g.pos - from).distance, greaterThan(2.9));
-    expect(g.maze.cellAt(g.pos), isNot(g.maze.goal));
-    expect(g.vel, Offset.zero);
-    expect(g.status, GameStatus.playing);
-    expect(g.notice, 'notice.mirror');
   });
 
   test('the floor cracks in four stages under a ball that stands still, then gives way', () {
@@ -138,7 +116,7 @@ void main() {
     expect(b.b.distance, greaterThan(g.maze.radius * 0.7));
   });
 
-  test('the prism bonus switches mirrors, floor and lasers off', () {
+  test('the prism bonus switches the floor and lasers off', () {
     final g = glass(level: 3, seed: 5);
     g.started = true;
     g.bonusCharges = 1;

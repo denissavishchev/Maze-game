@@ -102,15 +102,28 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
         }
       }
     case FloorStyle.ice:
-      // Frosted glass plates: rings and seams, with glints of light.
+      // Panes of glass: bevelled rings and seams, long reflections across.
       for (var r = 1.0; r < R; r += 1.0) {
         c.drawArc(Rect.fromCircle(center: Offset.zero, radius: r), 0, kTwoPi, false, line);
+        c.drawArc(
+          Rect.fromCircle(center: Offset.zero, radius: r + 0.04),
+          pi * 0.9,
+          pi * 0.9,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.03
+            ..color = Colors.white.withValues(alpha: 0.45),
+        );
         final count = max(6, (kTwoPi * (r + 0.5) / 1.0).round());
         for (var k = 0; k < count; k++) {
           c.drawLine(polar(r, k * kTwoPi / count), polar(min(r + 1.0, R), k * kTwoPi / count), line);
         }
       }
-      _glints(c, rnd, (R * R * 1.6).round(), () => polar(sqrt(rnd.nextDouble()) * (R - 0.3), rnd.nextDouble() * kTwoPi));
+      c.save();
+      c.clipPath(Path()..addOval(Rect.fromCircle(center: Offset.zero, radius: R)));
+      _reflections(c, Rect.fromCircle(center: Offset.zero, radius: R));
+      c.restore();
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rings.
       var ring = 0;
@@ -134,18 +147,18 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
   }
 }
 
-/// Little four-point sparks of light scattered over a glass floor.
-void _glints(Canvas c, Random rnd, int count, Offset Function() spot) {
-  final paint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeCap = StrokeCap.round
-    ..strokeWidth = 0.03
-    ..color = Colors.white.withValues(alpha: 0.85);
-  for (var i = 0; i < count; i++) {
-    final p = spot();
-    final s = 0.05 + rnd.nextDouble() * 0.08;
-    c.drawLine(p.translate(-s, 0), p.translate(s, 0), paint);
-    c.drawLine(p.translate(0, -s), p.translate(0, s), paint);
+/// Wide soft bands of light slanting across a glass floor.
+void _reflections(Canvas c, Rect area) {
+  final reach = area.width + area.height;
+  for (final (offset, width) in [(0.18, 0.9), (0.42, 0.35), (0.7, 0.6)]) {
+    final x = area.left + area.width * offset;
+    final band = Path()
+      ..moveTo(x, area.top - 1)
+      ..lineTo(x + width, area.top - 1)
+      ..lineTo(x + width - reach * 0.5, area.bottom + 1)
+      ..lineTo(x - reach * 0.5, area.bottom + 1)
+      ..close();
+    c.drawPath(band, Paint()..color = Colors.white.withValues(alpha: 0.13));
   }
 }
 
@@ -229,13 +242,11 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
           c.drawLine(tan.position + normal * 0.11, tan.position - normal * 0.11, joint);
           c.drawCircle(tan.position + normal * side * 0.4, 0.025, shade);
         case WallStyle.glass:
-          // A slanted streak of light across the pane, now and then a glint.
+          // Slanted streaks of light across the pane, some thin, some wide.
           if (k % 2 == 0) {
-            c.drawLine(tan.position + normal * 0.09 + tan.vector * 0.05,
-                tan.position - normal * 0.09 - tan.vector * 0.05,
-                light.withAlpha(120)..strokeWidth = 0.035);
-          } else if (rnd.nextDouble() < 0.4) {
-            c.drawCircle(tan.position + normal * side * 0.3, 0.02 + rnd.nextDouble() * 0.02, light);
+            c.drawLine(tan.position + normal * 0.1 + tan.vector * 0.06,
+                tan.position - normal * 0.1 - tan.vector * 0.06,
+                light.withAlpha(k % 4 == 0 ? 190 : 110)..strokeWidth = k % 4 == 0 ? 0.05 : 0.025);
           }
         case WallStyle.hull:
           // Panel seams across the wall and a rivet between them.
@@ -544,7 +555,7 @@ void _scenery(Canvas c, WorldTheme t, Random rnd, _Spot spot) {
             c,
             p + Offset((k - 1) * 0.4, k == 1 ? -0.15 : 0.1),
             0.3 + rnd.nextDouble() * 0.3 + (k == 1 ? 0.15 : 0),
-            rnd.nextBool() ? const Color(0xFF8ED6F2) : const Color(0xFFC9B8F5),
+            rnd.nextBool() ? const Color(0xFF5ED8C8) : const Color(0xFF8CF0A8),
             Colors.white,
           );
         }
@@ -772,22 +783,35 @@ void _rectFloor(Canvas c, Rect bounds, WorldTheme t, Random rnd) {
         }
       }
     case FloorStyle.ice:
-      // Frosted glass plates, each a little lighter or darker, with glints.
+      // Panes of glass: each lit from the top left, bevelled, with long
+      // reflections running across them all.
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
+          final tile = Rect.fromLTWH(x.toDouble(), y.toDouble(), 1, 1);
           c.drawRect(
-            Rect.fromLTWH(x.toDouble(), y.toDouble(), 1, 1),
-            Paint()..color = (rnd.nextBool() ? Colors.white : t.floorDark).withValues(alpha: 0.12),
+            tile,
+            Paint()
+              ..shader = ui.Gradient.linear(tile.topLeft, tile.bottomRight, [
+                Colors.white.withValues(alpha: 0.3),
+                Colors.white.withValues(alpha: 0.02),
+              ]),
           );
         }
       }
       for (var y = 0.0; y <= h; y += 1.0) {
         c.drawLine(Offset(0, y), Offset(w, y), line);
+        c.drawLine(Offset(0, y + 0.04), Offset(w, y + 0.04),
+            Paint()..strokeWidth = 0.03..color = Colors.white.withValues(alpha: 0.5));
       }
       for (var x = 0.0; x <= w; x += 1.0) {
         c.drawLine(Offset(x, 0), Offset(x, h), line);
+        c.drawLine(Offset(x + 0.04, 0), Offset(x + 0.04, h),
+            Paint()..strokeWidth = 0.03..color = Colors.white.withValues(alpha: 0.5));
       }
-      _glints(c, rnd, (w * h * 1.6).round(), () => Offset(0.2 + rnd.nextDouble() * (w - 0.4), 0.2 + rnd.nextDouble() * (h - 0.4)));
+      c.save();
+      c.clipRect(bounds);
+      _reflections(c, bounds);
+      c.restore();
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rows.
       var row = 0;

@@ -147,9 +147,6 @@ class GamePainter extends CustomPainter {
     for (final k in game.cracks) {
       _crack(canvas, k, t);
     }
-    for (final m in game.mirrors) {
-      _mirror(canvas, m, t);
-    }
     for (final l in game.lasers) {
       _laser(canvas, l, t);
     }
@@ -583,7 +580,7 @@ class GamePainter extends CustomPainter {
         c.drawLine(p.translate(0, -0.03), p.translate(0, 0.09), line);
         c.drawLine(p.translate(-0.05, 0.02), p.translate(0.05, 0.02), line);
       case WorldKind.glass:
-        // A prism splitting light: the lasers, the mirrors and the floor
+        // A prism splitting light: the lasers and the floor
         // leave you alone.
         c.drawPath(
           Path()
@@ -842,43 +839,6 @@ class GamePainter extends CustomPainter {
     final blink = sin(t * 6 + cam.phase) > 0.2;
     c.drawCircle(cam.pos.translate(-0.06, -0.06), 0.03,
         Paint()..color = (blink || k > 0 ? const Color(0xFFFF3B3B) : const Color(0xFF5A1E1E)));
-  }
-
-  /// A mirror set into a wall: a bright panel with a moving shine and a
-  /// glowing mark, flaring when it has just thrown the ball.
-  void _mirror(Canvas c, Mirror m, double t) {
-    final a = m.seg.a, b = m.seg.b;
-    final len = (b - a).distance;
-    if (len < 1e-6) return;
-    final dir = (b - a) / len;
-    final p0 = a + dir * (len * 0.08);
-    final p1 = b - dir * (len * 0.08);
-    Paint line(Color color, double width) => Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = width
-      ..color = color;
-    c.drawLine(p0, p1, line(Palette.ink, 0.34));
-    c.drawLine(p0, p1, line(const Color(0xFF9FB6C8), 0.28));
-    c.drawLine(p0, p1, line(const Color(0xFFEAF8FF), 0.2));
-    // A band of light sliding along the panel.
-    final u = (t * 0.45 + m.center.dx * 0.37) % 1.4 - 0.2;
-    if (u > 0 && u < 1) {
-      final s = p0 + (p1 - p0) * u;
-      c.drawLine(s, s + (p1 - p0) * 0.12, line(Colors.white, 0.14));
-    }
-    final glow = 0.5 + 0.5 * sin(t * 3 + m.center.dy);
-    final mid = m.center;
-    c.drawCircle(
-      mid,
-      0.42 + 0.3 * m.flash,
-      Paint()
-        ..shader = ui.Gradient.radial(mid, 0.42 + 0.3 * m.flash, [
-          const Color(0xFF7FE0F5).withValues(alpha: 0.25 + 0.2 * glow + 0.5 * m.flash),
-          const Color(0xFF7FE0F5).withValues(alpha: 0),
-        ]),
-    );
-    c.drawCircle(mid, 0.05, Paint()..color = const Color(0xFF29A8D6));
   }
 
   /// Cracking floor: hairlines at first, then wider cracks, then missing

@@ -88,9 +88,6 @@ class GameConfig {
   /// Spaceship: seconds between changes of the gravity's direction.
   double get gravityInterval => _pick(const [7.0, 6.5, 6.0, 5.5, 5.0]);
 
-  /// Glass: mirrors in the walls that throw the ball to a random place.
-  int get mirrorCount => _pick(const [2, 2, 3, 3, 4]);
-
   /// Glass: seconds standing on one spot before the floor gives way.
   double get crumbleSeconds => _pick(const [5.5, 5.0, 4.5, 4.0, 3.5]);
 

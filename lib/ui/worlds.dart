@@ -196,19 +196,19 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
       WorldKind.glass => const WorldTheme(
           id: 'glass',
           icon: Icons.wine_bar_rounded,
-          bg: Color(0xFF173A52),
-          floor: Color(0xFFD3EAF4),
-          floorDark: Color(0xFF9CC6DA),
-          wallBase: Color(0xFF2B6F93),
-          wallMain: Color(0xFF8ED6F2),
-          wallHi: Color(0xFFFFFFFF),
+          bg: Color(0xFF0E2A33),
+          floor: Color(0xFF9AD3D8),
+          floorDark: Color(0xFF4F9AA6),
+          wallBase: Color(0xFF0F5E66),
+          wallMain: Color(0xFF5ED8C8),
+          wallHi: Color(0xFFE9FFFB),
           gate: Color(0xFFB8A4F2),
           scenery: Scenery.prisms,
           wallStyle: WallStyle.glass,
           floorStyle: FloorStyle.ice,
-          panelTop: Color(0xEE24506E),
-          panelBottom: Color(0xEE12283A),
-          accent: Color(0xFF7FE0F5),
+          panelTop: Color(0xEE1C4D55),
+          panelBottom: Color(0xEE0E2A33),
+          accent: Color(0xFF5ED8C8),
         ),
     };
 
@@ -227,7 +227,7 @@ String hazardNote(GameConfig c) {
         : tr('note.trap.many', {'n': n, 's': trapEvery}),
     WorldKind.graveyard =>
       tr('note.graveyard', {'n': k, 's': trapEvery}),
-    WorldKind.glass => tr('note.glass', {'m': c.mirrorCount, 's': c.crumbleSeconds.toStringAsFixed(1)}),
+    WorldKind.glass => tr('note.glass', {'l': c.beamInterval.toStringAsFixed(1), 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1
         ? tr('note.boulder.one', {'s': boulderEvery})
