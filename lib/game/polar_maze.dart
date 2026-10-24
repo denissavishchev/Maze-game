@@ -29,6 +29,7 @@ class PolarMaze implements Maze {
     required this.entrance,
     required this.buttonCells,
     required this.solution,
+    this.loops = const [],
   }) {
     cellCount = offset.last + sectors.last;
     ringOfCell = List<int>.filled(cellCount, 0);
@@ -66,6 +67,9 @@ class PolarMaze implements Maze {
   /// Cells from the start to the goal.
   @override
   final List<int> solution;
+
+  @override
+  final List<int> loops;
 
   @override
   late final int cellCount;
@@ -358,6 +362,36 @@ class PolarMaze implements Maze {
     return path;
   }
 
+  @override
+  Path edgePath(int edge) {
+    final path = Path();
+    _addEdge(path, edge);
+    return path;
+  }
+
+  @override
+  List<Seg> edgeSegs(int edge) {
+    final c = edge >> 1;
+    final r = ringOfCell[c];
+    final n = sectors[r];
+    final s = sectorOf(c);
+    if (edge.isOdd) {
+      final theta = ((s + 1) % n) * kTwoPi / n;
+      return [Seg(polar(r.toDouble(), theta), polar(r + 1.0, theta), -1)];
+    }
+    final t0 = s * kTwoPi / n;
+    final t1 = (s + 1) * kTwoPi / n;
+    final pieces = max(1, ((t1 - t0) * r / 0.3).ceil());
+    return [
+      for (var i = 0; i < pieces; i++)
+        Seg(
+          polar(r.toDouble(), t0 + (t1 - t0) * i / pieces),
+          polar(r.toDouble(), t0 + (t1 - t0) * (i + 1) / pieces),
+          -1,
+        ),
+    ];
+  }
+
   /// Rough centre of gate [index], for effects and hints.
   @override
   Offset gateCenter(int index) {
@@ -403,20 +437,22 @@ class PolarMaze implements Maze {
     required int gates,
     Random? random,
     bool entranceOnTop = false,
+    int loops = 0,
   }) {
     final rnd = random ?? Random();
     PolarMaze? best;
     for (var attempt = 0; attempt < 80; attempt++) {
-      final m = _attempt(rings, gates, rnd, top: entranceOnTop);
+      final m = _attempt(rings, gates, rnd, top: entranceOnTop, loops: loops);
       if (m == null) continue;
       if (best == null || m.solution.length > best.solution.length) best = m;
       if (m.solution.length >= gates * 3 + rings) break;
     }
-    return best ?? _attempt(rings, gates, rnd, relaxed: true, top: entranceOnTop)!;
+    return best ??
+        _attempt(rings, gates, rnd, relaxed: true, top: entranceOnTop, loops: loops)!;
   }
 
   static PolarMaze? _attempt(int rings, int gates, Random rnd,
-      {bool relaxed = false, bool top = false}) {
+      {bool relaxed = false, bool top = false, int loops = 0}) {
     final sectors = _sectorsFor(rings);
     final offset = <int>[0];
     for (var r = 1; r < rings; r++) {
@@ -481,6 +517,7 @@ class PolarMaze implements Maze {
       rnd: rnd,
     );
     if (buttons == null) return null;
+    final extra = loops > 0 ? addLoops(probe, open, gateOf, loops, rnd) : const <int>[];
 
     return PolarMaze._(
       rings: rings,
@@ -491,6 +528,7 @@ class PolarMaze implements Maze {
       entrance: entrance,
       buttonCells: buttons,
       solution: route,
+      loops: extra,
     );
   }
 }

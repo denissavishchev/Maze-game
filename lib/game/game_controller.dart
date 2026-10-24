@@ -159,6 +159,142 @@ class GlassBeam {
   bool get burning => age >= warning;
 }
 
+/// Volcano: a stretch of corridor that floods with lava now and then. Crusted
+/// over it is harmless; molten, it is deadly. [along] is the unit direction of
+/// the corridor and [phase] seconds out of step with the others.
+class LavaFlow {
+  const LavaFlow(this.center, this.along, this.phase);
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+}
+
+/// Volcano: a steam vent that hisses, then erupts. The jet shoves the ball
+/// away, and scalds it at the very middle.
+class Geyser {
+  const Geyser(this.pos, this.phase);
+
+  final Offset pos;
+  final double phase;
+}
+
+/// Volcano: a patch of thin crust over lava. [level] runs from 0 (whole) to 1
+/// (broken through) while the ball stands on it.
+class Crust {
+  Crust(this.pos);
+
+  final Offset pos;
+  double level = 0;
+
+  int get stage => min(3, (level * 4).floor());
+}
+
+/// Factory: a conveyor belt across a stretch of corridor. It carries the ball
+/// along the corridor one way, then the other, [phase] seconds out of step.
+class Belt {
+  const Belt(this.center, this.along, this.phase);
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+}
+
+/// Factory: a press that slams down across the corridor: raised, a warning,
+/// then down for an instant.
+class Press {
+  const Press(this.center, this.along, this.phase);
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+}
+
+/// Factory: an electromagnet that switches on and off, pulling iron towards it.
+class Magnet {
+  const Magnet(this.pos, this.phase);
+
+  final Offset pos;
+  final double phase;
+}
+
+/// Factory: a wrecking ball swinging across a stretch of corridor on a rail,
+/// [phase] seconds out of step. It sweeps the middle of the corridor and is
+/// out of the way only at the two ends of its swing.
+class Pendulum {
+  const Pendulum(this.center, this.along, this.phase);
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+}
+
+/// Factory: a turntable that spins the floor under the ball one way, then the
+/// other, flinging it round its middle.
+class Turntable {
+  const Turntable(this.pos, this.phase);
+
+  final Offset pos;
+  final double phase;
+}
+
+/// Candy: a patch of caramel (always sticky) or chocolate ([melts]: sticky only
+/// while melted).
+class Goo {
+  const Goo(this.pos, this.radius, this.phase, this.melts);
+
+  final Offset pos;
+  final double radius;
+  final double phase;
+  final bool melts;
+}
+
+/// Candy: a gummy worm that wriggles up out of the floor across a stretch of
+/// corridor, blocks it for a while and slips away again. [phase] seconds out of
+/// step with the others.
+class Worm {
+  Worm(this.center, this.along, this.phase)
+      : seg = Seg(
+          center - Offset(-along.dy, along.dx) * 0.5,
+          center + Offset(-along.dy, along.dx) * 0.5,
+          -1,
+        );
+
+  final Offset center;
+  final Offset along;
+  final double phase;
+
+  /// The worm's body as a wall piece, while it is out.
+  final Seg seg;
+}
+
+/// Shifting maze: a passage that closes now and then and opens again. It only
+/// ever closes when the ball can still finish the maze without it.
+class ShiftDoor {
+  ShiftDoor(this.edge, this.cells, this.segs, this.center, this.initialState, this.initial)
+      : state = initialState,
+        timer = initial,
+        shown = initialState == 2 ? 1 : 0;
+
+  final int edge;
+  final (int, int) cells;
+  final List<Seg> segs;
+  final Offset center;
+
+  /// How it starts (the extra passages start shut, the maze's own open) and
+  /// the seconds before it first changes.
+  final int initialState;
+  final double initial;
+
+  /// 0 open, 1 about to shut, 2 shut.
+  int state;
+  double timer;
+
+  /// How much of the wall is drawn, 0 to 1: it grows in and fades out rather
+  /// than popping.
+  double shown;
+}
+
 class MudPatch {
   const MudPatch(this.pos, this.radius);
 
@@ -355,7 +491,43 @@ class GameController extends ChangeNotifier {
   int stage = 0;
 
   /// What the chosen ball is made of, and its radius.
-  BallStats get ball => statsOf(config.ball);
+  BallStats get ball => config.ball == BallKind.chameleon
+      ? (_chameleonStats ?? statsOf(BallKind.wood))
+      : statsOf(config.ball);
+
+  /// The chameleon: every [chameleonSeconds] it takes on the traits of another
+  /// ball (never itself, never the one it just was) and a new colour that has
+  /// nothing to do with it, so the player can only find out by playing. It
+  /// keeps its own size so it can never be wedged in a corridor.
+  static const double chameleonSeconds = 10;
+  BallKind? _mimic;
+  BallStats? _chameleonStats;
+  double _mimicTimer = chameleonSeconds;
+
+  /// Hue of the chameleon in degrees: where it is heading, and what is shown
+  /// (it fades from one to the other).
+  double chameleonHue = 0;
+  double chameleonShown = 0;
+
+  /// The ball whose traits are in force: the chosen ball, or for the chameleon
+  /// the one it has become.
+  BallKind get mimicking =>
+      config.ball == BallKind.chameleon ? (_mimic ?? BallKind.wood) : config.ball;
+
+  void _shiftChameleon({bool burst = true}) {
+    final others = [
+      for (final k in BallKind.values)
+        if (k != BallKind.chameleon && k != _mimic) k,
+    ];
+    _mimic = others[_rnd.nextInt(others.length)];
+    _chameleonStats = statsOf(_mimic!).withRadius(1);
+    // A new colour, clearly different from the last.
+    chameleonHue = (chameleonHue + 70 + _rnd.nextDouble() * 220) % 360;
+    if (burst) {
+      bursts.add(Burst(pos, 2));
+      Haptics.play(Haptic.tick);
+    }
+  }
   double get ballRadius => baseBallRadius * ball.radius;
 
   /// Tests switch hazards off so an autopilot cannot be killed.
@@ -402,6 +574,69 @@ class GameController extends ChangeNotifier {
   /// Glass: slower than this and the floor starts to crumble.
   static const double crumbleSpeed = 0.9;
   static const double crumbleRadius = 0.45;
+
+  /// Volcano: lava rivers, steam geysers and thin crust, and their clock.
+  List<LavaFlow> lavas = [];
+  List<Geyser> geysers = [];
+  List<Crust> crusts = [];
+  double _volcanoClock = 0;
+
+  /// Lava warns this long before it floods; it kills within [lavaLength] along
+  /// the corridor and [lavaWidth] across it.
+  static const double lavaWarning = 0.9;
+  static const double lavaLength = 0.5;
+  static const double lavaWidth = 0.4;
+
+  /// Geysers: seconds of hissing, seconds of eruption, the radius that
+  /// scalds, how far the jet shoves and how hard.
+  static const double geyserWarning = 1.0;
+  static const double geyserBurst = 1.3;
+  static const double geyserScald = 0.5;
+  static const double geyserReach = 1.5;
+  static const double geyserForce = 26;
+
+  /// Thin crust: how wide a patch is, and the speed below which it cracks.
+  static const double crustRadius = 0.45;
+  static const double crustSpeed = 0.9;
+
+  /// A volcanic bomb leaves fire this wide, for this long.
+  static const double bombFire = 0.42;
+  static const double bombFireSeconds = 3.5;
+
+  /// Factory: belts, presses, magnets and their clock.
+  List<Belt> belts = [];
+  List<Press> presses = [];
+  List<Magnet> magnets = [];
+  List<Pendulum> pendulums = [];
+  List<Turntable> turntables = [];
+  double _factoryClock = 0;
+  static const double pendulumSwing = 0.42;
+  static const double pendulumBob = 0.18;
+  static const double turntableReach = 0.6;
+  static const double turntableForce = 9;
+  static const double beltForce = 9;
+  static const double beltWarning = 0.8;
+  static const double pressWarning = 0.9;
+  static const double pressSlam = 0.45;
+  static const double magnetOnSeconds = 2.4;
+  static const double magnetWarning = 0.8;
+  static const double magnetReach = 2.0;
+  static const double magnetForce = 15;
+
+  /// Candy: caramel and chocolate, the clock the chocolate melts on, how
+  /// bouncy the walls are on top of the ball's own bounce.
+  List<Goo> goos = [];
+  List<Worm> worms = [];
+  double _candyClock = 0;
+  static const double wormWarning = 1.0;
+  static const double wormOut = 2.4;
+  static const double gooPeriod = 7.0;
+  static const double gooMelted = 3.6;
+  static const double candyBounce = 0.4;
+
+  /// Shifting maze: the doors, how long one warns before it shuts.
+  List<ShiftDoor> doors = [];
+  static const double doorWarning = 1.2;
 
   /// Gate to point the player at after a button was pressed (-1 = none).
   int hintGate = -1;
@@ -486,6 +721,10 @@ class GameController extends ChangeNotifier {
   bool get won => status == GameStatus.won;
   bool get lost => status == GameStatus.lost;
 
+  /// The shifting maze gets extra passages, so a door can shut without cutting
+  /// anything off.
+  int get _loopsWanted => config.world == WorldKind.shifting ? config.doorCount : 0;
+
   void newMaze() {
     maze = endless
         ? RectMaze.generate(
@@ -494,11 +733,13 @@ class GameController extends ChangeNotifier {
             gates: config.buttonCount,
             random: _rnd,
             startCol: _nextStartCol,
+            loops: _loopsWanted,
           )
         : PolarMaze.generate(
             rings: config.rings,
             gates: config.buttonCount,
             random: _rnd,
+            loops: _loopsWanted,
           );
     _centers = [for (var c = 0; c < maze.cellCount; c++) maze.cellCenter(c)];
     final taken = {maze.start, maze.goal, ...maze.buttonCells};
@@ -547,7 +788,27 @@ class GameController extends ChangeNotifier {
     cameras = [];
     if (config.world == WorldKind.space) _placeSpaceHazards();
     jellies = [];
-    if (config.world == WorldKind.ocean) _placeJellies();
+    if (config.world == WorldKind.ocean || config.world == WorldKind.candy) {
+      _placeJellies();
+    }
+    belts = [];
+    presses = [];
+    magnets = [];
+    pendulums = [];
+    turntables = [];
+    goos = [];
+    worms = [];
+    doors = [];
+    if (config.world == WorldKind.factory) _placeFactory();
+    if (config.world == WorldKind.candy) {
+      _placeWorms();
+      _placeGoo();
+    }
+    if (config.world == WorldKind.shifting) _placeDoors();
+    lavas = [];
+    geysers = [];
+    crusts = [];
+    if (config.world == WorldKind.volcano) _placeVolcano();
     restart();
   }
 
@@ -620,6 +881,222 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Straight stretches of the route, spread along it and clear of the start,
+  /// the buttons and the cells in [used] (which grows): where a laser-like
+  /// hazard across the corridor looks right. Each is a centre and the unit
+  /// direction of the corridor.
+  List<(Offset, Offset)> _routeSpots(int count, Set<int> used) {
+    final route = maze.solution;
+    final out = <(Offset, Offset)>[];
+    if (route.length < 5) return out;
+    final special = {maze.start, maze.goal, ...maze.buttonCells, ...bonusCells};
+    double bend(int i) {
+      final a = maze.cellCenter(route[i]) - maze.cellCenter(route[i - 1]);
+      final b = maze.cellCenter(route[i + 1]) - maze.cellCenter(route[i]);
+      return (a.dx * b.dy - a.dy * b.dx).abs() / (a.distance * b.distance);
+    }
+
+    for (var k = 0; k < count; k++) {
+      final want = (route.length * (k + 1) / (count + 1)).round();
+      int? at;
+      var best = double.infinity;
+      for (var i = want - 6; i <= want + 6; i++) {
+        if (i < 2 || i > route.length - 2) continue;
+        if (used.contains(route[i]) || special.contains(route[i])) continue;
+        final score = bend(i) + 0.03 * (i - want).abs();
+        if (score < best) {
+          best = score;
+          at = i;
+        }
+      }
+      if (at == null) continue;
+      used.add(route[at]);
+      final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
+      out.add((maze.cellCenter(route[at]), dir / dir.distance));
+    }
+    return out;
+  }
+
+  /// Factory: presses and belts across the route, magnets anywhere else.
+  void _placeFactory() {
+    final used = <int>{};
+    // 0 press, 1 belt, 2 pendulum, 3 turntable.
+    final kinds = [
+      for (var i = 0; i < config.pressCount; i++) 0,
+      for (var i = 0; i < config.beltCount; i++) 1,
+      for (var i = 0; i < config.pendulumCount; i++) 2,
+      for (var i = 0; i < config.turntableCount; i++) 3,
+    ]..shuffle(_rnd);
+    final spots = _routeSpots(kinds.length, used);
+    for (var k = 0; k < spots.length; k++) {
+      final (center, along) = spots[k];
+      switch (kinds[k]) {
+        case 0:
+          presses.add(Press(center, along, _rnd.nextDouble() * config.pressPeriod));
+        case 1:
+          belts.add(Belt(center, along, _rnd.nextDouble() * config.beltPeriod * 2));
+        case 2:
+          pendulums.add(Pendulum(center, along, _rnd.nextDouble() * config.pendulumPeriod));
+        default:
+          turntables.add(Turntable(center, _rnd.nextDouble() * config.beltPeriod * 2));
+      }
+    }
+    final special = {maze.start, maze.goal, ...maze.buttonCells, ...bonusCells, ...used};
+    final start = maze.cellCenter(maze.start);
+    final cells = [
+      for (var c = 1; c < maze.cellCount; c++)
+        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 2.5) c,
+    ]..shuffle(_rnd);
+    for (final c in cells.take(config.magnetCount)) {
+      magnets.add(Magnet(maze.cellCenter(c), _rnd.nextDouble() * config.magnetPeriod));
+    }
+  }
+
+  /// Candy: gummy worms across straight stretches of the route.
+  void _placeWorms() {
+    for (final (center, along) in _routeSpots(config.wormCount, {})) {
+      worms.add(Worm(center, along, _rnd.nextDouble() * config.wormPeriod));
+    }
+  }
+
+  /// Candy: caramel and chocolate, half of it right on the route.
+  void _placeGoo() {
+    final special = {
+      maze.start,
+      maze.goal,
+      ...maze.buttonCells,
+      ...bonusCells,
+      for (final w in worms) maze.cellAt(w.center),
+    };
+    final start = maze.cellCenter(maze.start);
+    final used = <int>{};
+    bool free(int c) =>
+        !special.contains(c) &&
+        !used.contains(c) &&
+        (maze.cellCenter(c) - start).distance > 2.0;
+    final onRoute = [for (final c in maze.solution) if (free(c)) c]..shuffle(_rnd);
+    final chosen = onRoute.take((config.gooCount + 1) ~/ 2).toList();
+    used.addAll(chosen);
+    final elsewhere = [
+      for (var c = 1; c < maze.cellCount; c++)
+        if (free(c)) c,
+    ]..shuffle(_rnd);
+    chosen.addAll(elsewhere.take(config.gooCount - chosen.length));
+    for (var i = 0; i < chosen.length; i++) {
+      goos.add(Goo(
+        maze.cellCenter(chosen[i]),
+        0.42,
+        _rnd.nextDouble() * gooPeriod,
+        i.isOdd,
+      ));
+    }
+  }
+
+  /// Shifting maze: the extra passages are doors, and so are a few of the
+  /// maze's own; they all start open, at different times.
+  void _placeDoors() {
+    final ends = <int, (int, int)>{};
+    for (var c = 0; c < maze.cellCount; c++) {
+      for (final (n, e) in maze.neighbours(c)) {
+        if (c < n) ends[e] = (c, n);
+      }
+    }
+    final noGates = List<bool>.filled(maze.gateCount, false);
+    final loopSet = maze.loops.toSet();
+    final keep = {maze.start, maze.goal};
+    final tree = [
+      for (final e in ends.keys)
+        if (!loopSet.contains(e) &&
+            maze.passable(e, noGates) &&
+            !keep.contains(ends[e]!.$1) &&
+            !keep.contains(ends[e]!.$2))
+          e,
+    ]..shuffle(_rnd);
+    final edges = [
+      ...maze.loops.take(config.doorCount),
+      ...tree.take(max(1, config.doorCount ~/ 2)),
+    ];
+    for (final e in edges) {
+      final (a, b) = ends[e]!;
+      // The extra passages start shut, so the maze begins as the plain maze
+      // and then keeps opening up and closing again; its own passages start
+      // open.
+      final shut = loopSet.contains(e);
+      doors.add(ShiftDoor(
+        e,
+        (a, b),
+        maze.edgeSegs(e),
+        (maze.cellCenter(a) + maze.cellCenter(b)) / 2,
+        shut ? 2 : 0,
+        shut
+            ? 1.0 + _rnd.nextDouble() * config.doorClosedSeconds
+            : 2.0 + _rnd.nextDouble() * config.doorOpenSeconds,
+      ));
+    }
+  }
+
+  /// Volcano: lava floods the straightest stretches along the route, steam
+  /// geysers and thin crust sit half on the route and half off it, all clear of
+  /// the start, the buttons and each other.
+  void _placeVolcano() {
+    final route = maze.solution;
+    if (route.length < 6) return;
+    final special = {maze.start, maze.goal, ...maze.buttonCells, ...bonusCells};
+    final start = maze.cellCenter(maze.start);
+    final used = <int>{};
+    bool free(int c) =>
+        !special.contains(c) &&
+        !used.contains(c) &&
+        (maze.cellCenter(c) - start).distance > 2.5;
+    double bend(int i) {
+      final a = maze.cellCenter(route[i]) - maze.cellCenter(route[i - 1]);
+      final b = maze.cellCenter(route[i + 1]) - maze.cellCenter(route[i]);
+      return (a.dx * b.dy - a.dy * b.dx).abs() / (a.distance * b.distance);
+    }
+
+    final n = config.lavaCount;
+    for (var k = 0; k < n; k++) {
+      final want = (route.length * (k + 1) / (n + 1)).round();
+      int? at;
+      var best = double.infinity;
+      for (var i = want - 4; i <= want + 4; i++) {
+        if (i < 2 || i > route.length - 3) continue;
+        if (!free(route[i]) || used.contains(route[i - 1]) || used.contains(route[i + 1])) continue;
+        final score = bend(i) + bend(i - 1) * 0.5 + 0.03 * (i - want).abs();
+        if (score < best) {
+          best = score;
+          at = i;
+        }
+      }
+      if (at == null) continue;
+      used..add(route[at])..add(route[at - 1])..add(route[at + 1]);
+      final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
+      lavas.add(LavaFlow(
+        maze.cellCenter(route[at]),
+        dir / dir.distance,
+        _rnd.nextDouble() * config.lavaPeriod,
+      ));
+    }
+
+    final everywhere = [for (var c = 1; c < maze.cellCount; c++) c];
+    List<int> pick(int count) {
+      final onRoute = [for (final c in route) if (free(c)) c]..shuffle(_rnd);
+      final chosen = onRoute.take((count + 1) ~/ 2).toList();
+      used.addAll(chosen);
+      final elsewhere = [for (final c in everywhere) if (free(c)) c]..shuffle(_rnd);
+      final rest = elsewhere.take(count - chosen.length).toList();
+      used.addAll(rest);
+      return [...chosen, ...rest];
+    }
+
+    for (final c in pick(config.geyserCount)) {
+      geysers.add(Geyser(maze.cellCenter(c), _rnd.nextDouble() * config.geyserPeriod));
+    }
+    for (final c in pick(config.crustCount)) {
+      crusts.add(Crust(maze.cellCenter(c)));
+    }
+  }
+
   /// Same maze, everything back to its starting state.
   void restart() {
     gateOpen = List<bool>.filled(maze.gateCount, false);
@@ -650,6 +1127,15 @@ class GameController extends ChangeNotifier {
     strain = 0;
     _strainHold = 0;
     sink = 0;
+    if (config.ball == BallKind.chameleon) {
+      _mimic = null;
+      _mimicTimer = chameleonSeconds;
+      _shiftChameleon(burst: false);
+      chameleonShown = chameleonHue;
+    } else {
+      _mimic = null;
+      _chameleonStats = null;
+    }
     windDir = Offset.zero;
     windWarnLeft = 0;
     windLeft = 0;
@@ -665,6 +1151,17 @@ class GameController extends ChangeNotifier {
     }
     _beamTimer = config.beamInterval;
     _beamNoticed = false;
+    _volcanoClock = 0;
+    _factoryClock = 0;
+    _candyClock = 0;
+    for (final d in doors) {
+      d.state = d.initialState;
+      d.timer = d.initial;
+      d.shown = d.initialState == 2 ? 1 : 0;
+    }
+    for (final k in crusts) {
+      k.level = 0;
+    }
     for (final cam in cameras) {
       cam.alert = 0;
     }
@@ -722,6 +1219,15 @@ class GameController extends ChangeNotifier {
     }
     if (!started && tilt.distance > startTilt) started = true;
     if (started) elapsed += dt;
+    if (config.ball == BallKind.chameleon) {
+      if (started && (_mimicTimer -= dt) <= 0) {
+        _mimicTimer = chameleonSeconds;
+        _shiftChameleon();
+      }
+      var turn = (chameleonHue - chameleonShown) % 360;
+      if (turn > 180) turn -= 360;
+      chameleonShown = (chameleonShown + turn * min(1.0, dt * 5)) % 360;
+    }
 
     if ((config.world == WorldKind.mountains || config.world == WorldKind.ocean) &&
         config.windEnabled &&
@@ -739,7 +1245,7 @@ class GameController extends ChangeNotifier {
     final breaksAt = ball.breaksAt;
     if (breaksAt != null) _trackStrain(dt, _impact / breaksAt);
     if (breaksAt != null && _impact >= breaksAt && status == GameStatus.playing) {
-      _lose(config.ball == BallKind.bubble ? 'lose.bubble' : 'lose.glass');
+      _lose(mimicking == BallKind.bubble ? 'lose.bubble' : 'lose.glass');
     }
     _explore();
     _updateNoise(dt);
@@ -870,6 +1376,8 @@ class GameController extends ChangeNotifier {
         BallKind.slime => Sound.impactSlime,
         BallKind.paper => Sound.impactPaper,
         BallKind.bubble => Sound.impactBubble,
+        // The same for every shape it takes, so the sound gives nothing away.
+        BallKind.chameleon => Sound.impactWood,
       },
       volume: 0.15 + 0.85 * strength,
     );
@@ -1060,6 +1568,12 @@ class GameController extends ChangeNotifier {
       vel += windDir * (config.windStrength * (1 - ball.windResist) * dt);
     }
     if (gravityActive) vel += gravityDir * (config.gravityStrength * dt);
+    if (config.world == WorldKind.volcano && hazardsEnabled && started) {
+      vel += _steamPush() * dt;
+    }
+    if (config.world == WorldKind.factory && hazardsEnabled && started) {
+      vel += _factoryPull() * dt;
+    }
 
     if (config.world == WorldKind.mud) {
       final boggy = patch != null && bonusLeft <= 0;
@@ -1078,10 +1592,13 @@ class GameController extends ChangeNotifier {
 
     // Cold fog drags at the ball, though it never stops it.
     final cold = !ball.floats && fog.any((f) => (f.pos - pos).distance < f.radius);
-    vel *= exp(-(muddy ? 7.0 : cold ? 4.2 : 1.7 * ball.damping) * dt);
+    final sticky = !ball.floats && goos.any(_underGoo);
+    vel *= exp(-(muddy ? 7.0 : sticky ? 6.5 : cold ? 4.2 : 1.7 * ball.damping) * dt);
     final cap = muddy
         ? 1.8
-        : _maxSpeed * ball.maxSpeed * (cold ? 0.5 : 1.0);
+        : sticky
+            ? 1.3
+            : _maxSpeed * ball.maxSpeed * (cold ? 0.5 : 1.0);
     if (vel.distance > cap) vel = vel / vel.distance * cap;
 
     final steps = max(1, (vel.distance * dt / 0.07).ceil());
@@ -1097,11 +1614,15 @@ class GameController extends ChangeNotifier {
   /// The walls around the ball, with the airlock doors that are shut.
   Iterable<Seg> _wallsNear() {
     final walls = maze.segmentsNear(pos);
-    if (airlocks.isEmpty) return walls;
+    if (airlocks.isEmpty && doors.isEmpty && worms.isEmpty) return walls;
     return [
       ...walls,
       for (final a in airlocks)
         if (airlockClosed(a)) a.seg,
+      for (final w in worms)
+        if (wormPhase(w) == 2) w.seg,
+      for (final d in doors)
+        if (d.state == 2) ...d.segs,
     ];
   }
 
@@ -1123,7 +1644,8 @@ class GameController extends ChangeNotifier {
         pos = q + n * reach;
         final vn = vel.dx * n.dx + vel.dy * n.dy;
         if (vn < 0) {
-          vel -= n * (vn * (1 + ball.bounce));
+          final bounce = ball.bounce + (config.world == WorldKind.candy ? candyBounce : 0);
+          vel -= n * (vn * (1 + bounce));
           _impact = max(_impact, -vn);
         }
       }
@@ -1195,6 +1717,7 @@ class GameController extends ChangeNotifier {
         }
       case WorldKind.mud:
       case WorldKind.mountains:
+      case WorldKind.volcano:
         hazards.clear();
       case WorldKind.graveyard:
         // Holy water: every ghost is awake and driven off for the duration.
@@ -1209,6 +1732,9 @@ class GameController extends ChangeNotifier {
       case WorldKind.space:
       case WorldKind.glass:
       case WorldKind.ocean:
+      case WorldKind.factory:
+      case WorldKind.candy:
+      case WorldKind.shifting:
         break; // the light, the stabilizer and the prism work through [bonusLeft]
     }
     notifyListeners();
@@ -1462,6 +1988,15 @@ class GameController extends ChangeNotifier {
         _updateGlass(dt);
       case WorldKind.ocean:
         _updateJellies(dt);
+      case WorldKind.candy:
+        _candyClock += dt;
+        _updateJellies(dt);
+      case WorldKind.volcano:
+        _updateVolcano(dt);
+      case WorldKind.factory:
+        _updateFactory(dt);
+      case WorldKind.shifting:
+        _updateDoors(dt);
       case WorldKind.graveyard:
         for (final g in creatures) {
           if (g.lockLeft > 0) {
@@ -1525,10 +2060,19 @@ class GameController extends ChangeNotifier {
     }
 
     // Timed dangers.
+    if (config.world == WorldKind.volcano && bonusLeft > 0) hazards.clear();
     for (final h in hazards) {
       final wasArmed = h.armed;
       h.age += dt;
-      if (config.world == WorldKind.mountains) {
+      if (config.world == WorldKind.volcano) {
+        // The bomb blasts where it lands, then burns where it fell.
+        if (!wasArmed && h.armed) {
+          bursts.add(Burst(h.pos, 1));
+          if ((h.pos - pos).distance < h.radius) _lose('lose.bomb');
+        } else if (h.armed && (h.pos - pos).distance < bombFire) {
+          _lose('lose.bomb');
+        }
+      } else if (config.world == WorldKind.mountains) {
         // The boulder crashes down the moment it becomes armed.
         if (!wasArmed && h.armed) {
           bursts.add(Burst(h.pos, 1));
@@ -1542,14 +2086,323 @@ class GameController extends ChangeNotifier {
 
     if (config.world == WorldKind.mud ||
         config.world == WorldKind.mountains ||
-        config.world == WorldKind.graveyard) {
+        config.world == WorldKind.graveyard ||
+        config.world == WorldKind.volcano) {
+      final bombs = config.world == WorldKind.volcano;
+      if (bombs && bonusLeft > 0) return;
       _spawnTimer -= dt;
       if (_spawnTimer <= 0) {
         _spawnTimer = config.trapInterval *
-            (config.world == WorldKind.mountains ? 1.2 : 1.0);
-        for (var i = 0; i < config.trapCount; i++) {
+            (config.world == WorldKind.mountains ? 1.2 : bombs ? 1.3 : 1.0);
+        for (var i = 0; i < (bombs ? config.bombCount : config.trapCount); i++) {
           _spawnHazard(i);
         }
+      }
+    }
+  }
+
+  // ---- factory ----------------------------------------------------------
+
+  /// Which way a belt runs now: 1 along its direction, -1 against it, 0 while
+  /// the emergency stop holds.
+  int beltDir(Belt b) {
+    if (bonusLeft > 0) return 0;
+    return ((_factoryClock + b.phase) / config.beltPeriod).floor().isEven ? 1 : -1;
+  }
+
+  /// A belt is about to reverse.
+  bool beltReversing(Belt b) {
+    if (bonusLeft > 0) return false;
+    return (_factoryClock + b.phase) % config.beltPeriod > config.beltPeriod - beltWarning;
+  }
+
+  /// Which way a turntable spins the floor: 1 clockwise on the screen, -1 the
+  /// other way, 0 while the emergency stop holds.
+  int turntableDir(Turntable t) {
+    if (bonusLeft > 0) return 0;
+    return ((_factoryClock + t.phase) / config.beltPeriod).floor().isEven ? 1 : -1;
+  }
+
+  /// A turntable is about to reverse.
+  bool turntableReversing(Turntable t) {
+    if (bonusLeft > 0) return false;
+    return (_factoryClock + t.phase) % config.beltPeriod > config.beltPeriod - beltWarning;
+  }
+
+  /// How far across the corridor a wrecking ball is, -[pendulumSwing] to
+  /// [pendulumSwing]. With the emergency stop it hangs at one end, out of the
+  /// way.
+  double pendulumAcross(Pendulum p) {
+    if (bonusLeft > 0) return pendulumSwing;
+    return pendulumSwing * sin(2 * pi * (_factoryClock + p.phase) / config.pendulumPeriod);
+  }
+
+  Offset pendulumBobAt(Pendulum p) =>
+      p.center + Offset(-p.along.dy, p.along.dx) * pendulumAcross(p);
+
+  /// Where a press is: 2 slamming, 1 coming down, 0 raised.
+  int pressPhase(Press p) {
+    if (bonusLeft > 0) return 0;
+    final period = config.pressPeriod;
+    final t = (_factoryClock + p.phase) % period;
+    if (t >= period - pressSlam) return 2;
+    if (t >= period - pressSlam - pressWarning) return 1;
+    return 0;
+  }
+
+  /// Where a magnet is: 2 on, 1 about to switch on, 0 off.
+  int magnetPhase(Magnet m) {
+    if (bonusLeft > 0) return 0;
+    final period = config.magnetPeriod;
+    final t = (_factoryClock + m.phase) % period;
+    if (t < magnetOnSeconds) return 2;
+    if (t >= period - magnetWarning) return 1;
+    return 0;
+  }
+
+  bool _inZone(Offset center, Offset along, double halfAlong, double halfAcross) {
+    final d = pos - center;
+    final a = d.dx * along.dx + d.dy * along.dy;
+    final c = d.dx * -along.dy + d.dy * along.dx;
+    return a.abs() < halfAlong && c.abs() < halfAcross;
+  }
+
+  /// What the belts carry the ball along with, and the magnets pull it to.
+  Offset _factoryPull() {
+    var pull = Offset.zero;
+    for (final b in belts) {
+      final dir = beltDir(b);
+      if (dir != 0 && _inZone(b.center, b.along, 0.5, 0.45)) {
+        pull += b.along * (beltForce * dir);
+      }
+    }
+    for (final t in turntables) {
+      final dir = turntableDir(t);
+      final d = pos - t.pos;
+      final r = d.distance;
+      if (dir != 0 && r < turntableReach && r > 1e-6) {
+        pull += Offset(-d.dy, d.dx) / r * (turntableForce * dir);
+      }
+    }
+    if (ball.magnetic > 0) {
+      for (final m in magnets) {
+        if (magnetPhase(m) != 2) continue;
+        final to = m.pos - pos;
+        final d = to.distance;
+        if (d >= magnetReach || d < 1e-6) continue;
+        pull += to / d * (magnetForce * (1 - d / magnetReach) * ball.magnetic);
+      }
+    }
+    return pull;
+  }
+
+  void _updateFactory(double dt) {
+    _factoryClock += dt;
+    for (final p in presses) {
+      if (pressPhase(p) == 2 && _inZone(p.center, p.along, 0.3 + ballRadius * 0.3, 0.6)) {
+        _lose('lose.press');
+        return;
+      }
+    }
+    // A wrecking ball knocks the ball back to the start.
+    if (_invulnerable <= 0) {
+      for (final p in pendulums) {
+        if ((pendulumBobAt(p) - pos).distance < pendulumBob + ballRadius * 0.6) {
+          _sendBack('notice.pendulum');
+          return;
+        }
+      }
+    }
+  }
+
+  // ---- candy ------------------------------------------------------------
+
+  /// Whether a patch is sticky now: caramel always, chocolate while it is
+  /// melted, nothing while the mint holds.
+  bool gooSticky(Goo g) =>
+      bonusLeft <= 0 && (!g.melts || (_candyClock + g.phase) % gooPeriod < gooMelted);
+
+  /// Where a worm is: 2 out across the corridor, 1 stirring under the floor,
+  /// 0 gone (always, while the mint lasts).
+  int wormPhase(Worm w) {
+    if (bonusLeft > 0) return 0;
+    final period = config.wormPeriod;
+    final t = (_candyClock + w.phase) % period;
+    if (t >= period - wormOut) return 2;
+    if (t >= period - wormOut - wormWarning) return 1;
+    return 0;
+  }
+
+  bool _underGoo(Goo g) => (g.pos - pos).distance < g.radius + 0.1 && gooSticky(g);
+
+  // ---- shifting maze ----------------------------------------------------
+
+  /// Whether the maze can still be finished from where the ball stands with
+  /// the doors in [closed] shut for good: walk everywhere that can be reached,
+  /// press every button found, and see whether the way to the exit is open.
+  bool _canFinish(Set<int> closed) {
+    final open = List<bool>.of(gateOpen);
+    final from = maze.cellAt(pos);
+    while (true) {
+      final seen = reachable(
+          maze, [from], (e) => maze.passable(e, open) && !closed.contains(e));
+      if (seen.contains(maze.goal)) return true;
+      var more = false;
+      for (var j = 0; j < open.length; j++) {
+        if (!open[j] && seen.contains(maze.buttonCells[j])) {
+          open[j] = true;
+          more = true;
+        }
+      }
+      if (!more) return false;
+    }
+  }
+
+  /// Vision: while the bonus lasts, every shifting wall shows its outline and
+  /// counts down to its next change.
+  bool get doorsRevealed => config.world == WorldKind.shifting && bonusLeft > 0;
+
+  /// Tests: whether the maze can still be finished with the doors as they are.
+  @visibleForTesting
+  bool canFinishForTest() =>
+      _canFinish({for (final d in doors) if (d.state == 2) d.edge});
+
+  /// A door may shut only when the ball is well clear of it and the maze
+  /// stays finishable even if every shut door stayed shut for ever.
+  bool _canClose(ShiftDoor d) {
+    for (final s in d.segs) {
+      final ab = s.b - s.a;
+      final t = (((pos - s.a).dx * ab.dx + (pos - s.a).dy * ab.dy) /
+              (ab.dx * ab.dx + ab.dy * ab.dy))
+          .clamp(0.0, 1.0);
+      if ((pos - (s.a + ab * t)).distance < ballRadius + 0.6) return false;
+    }
+    final closed = {
+      for (final o in doors)
+        if (o.state == 2) o.edge,
+      d.edge,
+    };
+    return _canFinish(closed);
+  }
+
+  void _updateDoors(double dt) {
+    for (final d in doors) {
+      final to = d.state == 2 ? 1.0 : 0.0;
+      d.shown += (to - d.shown).clamp(-dt / 0.35, dt / 0.35);
+    }
+    for (final d in doors) {
+      d.timer -= dt;
+      if (d.timer > 0) continue;
+      switch (d.state) {
+        case 0:
+          // Only doors that can really shut give a warning.
+          if (_canClose(d)) {
+            d.state = 1;
+            d.timer = doorWarning;
+          } else {
+            d.timer = 0.8 + _rnd.nextDouble();
+          }
+        case 1:
+          if (_canClose(d)) {
+            d.state = 2;
+            d.timer = config.doorClosedSeconds * (0.8 + 0.4 * _rnd.nextDouble());
+          } else {
+            // The ball came too close, or the way would be cut: it stays open.
+            d.state = 0;
+            d.timer = 0.8 + _rnd.nextDouble();
+          }
+        default:
+          d.state = 0;
+          d.timer = config.doorOpenSeconds * (0.7 + 0.6 * _rnd.nextDouble());
+      }
+    }
+  }
+
+  // ---- volcano ----------------------------------------------------------
+
+  /// Where a lava river is in its cycle: 2 molten, 1 about to flood, 0 crusted
+  /// over (always, while the cooling bonus lasts).
+  int lavaPhase(LavaFlow l) {
+    if (bonusLeft > 0) return 0;
+    final t = lavaTime(l);
+    if (t < config.lavaMolten) return 2;
+    if (t >= config.lavaPeriod - lavaWarning) return 1;
+    return 0;
+  }
+
+  /// Seconds into the river's cycle: molten at the start, then cooling.
+  double lavaTime(LavaFlow l) => (_volcanoClock + l.phase) % config.lavaPeriod;
+
+  /// Where a geyser is: 2 erupting, 1 hissing before it, 0 quiet.
+  int geyserPhase(Geyser g) {
+    if (bonusLeft > 0) return 0;
+    final t = geyserTime(g);
+    if (t >= config.geyserPeriod - geyserBurst) return 2;
+    if (t >= config.geyserPeriod - geyserBurst - geyserWarning) return 1;
+    return 0;
+  }
+
+  double geyserTime(Geyser g) => (_volcanoClock + g.phase) % config.geyserPeriod;
+
+  /// How far a geyser is through its hissing or eruption, 0 to 1.
+  double geyserProgress(Geyser g) {
+    final t = geyserTime(g);
+    final burstAt = config.geyserPeriod - geyserBurst;
+    return geyserPhase(g) == 2
+        ? ((t - burstAt) / geyserBurst).clamp(0.0, 1.0)
+        : ((t - (burstAt - geyserWarning)) / geyserWarning).clamp(0.0, 1.0);
+  }
+
+  bool _inLava(LavaFlow l) {
+    final d = pos - l.center;
+    final along = d.dx * l.along.dx + d.dy * l.along.dy;
+    final across = d.dx * -l.along.dy + d.dy * l.along.dx;
+    return along.abs() < lavaLength && across.abs() < lavaWidth;
+  }
+
+  /// The jets of erupting geysers shove the ball away; lighter balls more.
+  Offset _steamPush() {
+    var push = Offset.zero;
+    for (final g in geysers) {
+      if (geyserPhase(g) != 2) continue;
+      final away = pos - g.pos;
+      final d = away.distance;
+      if (d >= geyserReach) continue;
+      final dir = d < 1e-6 ? const Offset(1, 0) : away / d;
+      push += dir * (geyserForce * (1 - d / geyserReach) * (1 - ball.windResist));
+    }
+    return push;
+  }
+
+  void _updateVolcano(double dt) {
+    _volcanoClock += dt;
+    final shielded = bonusLeft > 0;
+    if (!shielded) {
+      for (final l in lavas) {
+        if (lavaPhase(l) == 2 && _inLava(l)) {
+          _lose('lose.lava');
+          return;
+        }
+      }
+      for (final g in geysers) {
+        if (geyserPhase(g) == 2 && (g.pos - pos).distance < geyserScald) {
+          _lose('lose.steam');
+          return;
+        }
+      }
+    }
+    // Thin crust gives way under a ball that dawdles on it, and mends slowly
+    // once the ball moves on.
+    final slow = !shielded && !ball.floats && vel.distance < crustSpeed;
+    for (final k in crusts) {
+      if (slow && (k.pos - pos).distance < crustRadius) {
+        k.level += dt / config.crustSeconds;
+      } else {
+        k.level = max(0, k.level - dt * 0.5);
+      }
+      if (k.level >= 1) {
+        _lose('lose.crust');
+        return;
       }
     }
   }
@@ -1626,12 +2479,16 @@ class GameController extends ChangeNotifier {
   }
 
   /// A jellyfish stung the ball: back to the start, gates stay open.
-  void caughtByJelly() {
+  void caughtByJelly() => _sendBack(
+      config.world == WorldKind.candy ? 'notice.gummy' : 'notice.jelly');
+
+  /// Back to the start (the gates stay open), with a message.
+  void _sendBack(String key) {
     bursts.add(Burst(pos, 1));
     pos = maze.cellCenter(maze.start);
     vel = Offset.zero;
     _invulnerable = 2.0;
-    notice = 'notice.jelly';
+    notice = key;
     noticeArgs = const {};
     noticeLeft = 2.5;
   }
@@ -1776,7 +2633,7 @@ class GameController extends ChangeNotifier {
   void spawnTrap([int i = 0]) => _spawnHazard(i);
 
   void _spawnHazard(int i) {
-    if (config.world == WorldKind.mountains) {
+    if (config.world == WorldKind.mountains || config.world == WorldKind.volcano) {
       _spawnBoulder(i);
     } else {
       _spawnSpikes(i);
@@ -1807,10 +2664,14 @@ class GameController extends ChangeNotifier {
     }
     lead = minBoulderDistance;
     target ??= pos + polar(lead, base + pi); // cornered: drop it behind
+    // A volcanic bomb always lands in a corridor, in the middle of a cell.
+    if (config.world == WorldKind.volcano) {
+      target = maze.cellCenter(maze.cellAt(target));
+    }
     hazards.add(Hazard(
       target,
       armAt: warn,
-      life: warn + rubbleSeconds,
+      life: warn + (config.world == WorldKind.volcano ? bombFireSeconds : rubbleSeconds),
       radius: 0.85,
     ));
   }

@@ -1,7 +1,7 @@
 import '../l10n/strings.dart';
 import 'ball.dart';
 
-enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass, ocean }
+enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass, ocean, volcano, factory, candy, shifting }
 
 /// A chosen world and one of five levels. The level sets everything that
 /// makes the game harder: maze size, number of buttons (and gates), number of
@@ -100,6 +100,54 @@ class GameConfig {
   /// Glass: seconds between one laser and the next, and how many at once.
   double get beamInterval => _pick(const [5.0, 4.5, 4.0, 3.5, 3.0]);
   int get beamCount => _pick(const [1, 1, 1, 2, 2]);
+
+  /// Volcano: rivers of lava across the route. A full cycle, and how long of
+  /// it the lava is molten (it warns for a short while before that).
+  int get lavaCount => _pick(const [2, 2, 3, 4, 5]);
+  double get lavaPeriod => _pick(const [6.6, 6.2, 5.8, 5.4, 5.0]);
+  double get lavaMolten => _pick(const [1.8, 1.9, 2.0, 2.1, 2.2]);
+
+  /// Volcano: steam geysers, and seconds from one eruption to the next.
+  int get geyserCount => _pick(const [2, 2, 3, 3, 4]);
+  double get geyserPeriod => _pick(const [6.0, 5.6, 5.2, 4.8, 4.4]);
+
+  /// Volcano: patches of thin crust, and seconds standing still before one
+  /// gives way.
+  int get crustCount => _pick(const [3, 4, 5, 6, 7]);
+  double get crustSeconds => _pick(const [3.2, 2.9, 2.6, 2.3, 2.0]);
+
+  /// Volcano: bombs thrown by the volcano per wave.
+  int get bombCount => _pick(const [1, 1, 1, 2, 2]);
+
+  /// Factory: conveyor belts (and seconds before one reverses), presses (and
+  /// seconds from one slam to the next) and electromagnets (and their cycle).
+  int get beltCount => _pick(const [4, 5, 6, 7, 8]);
+  double get beltPeriod => _pick(const [5.0, 4.6, 4.2, 3.8, 3.4]);
+  int get pressCount => _pick(const [1, 2, 2, 3, 3]);
+  double get pressPeriod => _pick(const [4.4, 4.1, 3.8, 3.5, 3.2]);
+  int get magnetCount => _pick(const [1, 1, 2, 2, 3]);
+  double get magnetPeriod => _pick(const [5.5, 5.2, 4.8, 4.4, 4.0]);
+
+  /// Factory: wrecking-ball pendulums (and seconds per swing there and back)
+  /// and turntables.
+  int get pendulumCount => _pick(const [1, 1, 2, 2, 3]);
+  double get pendulumPeriod => _pick(const [2.8, 2.6, 2.4, 2.2, 2.0]);
+  int get turntableCount => _pick(const [1, 1, 2, 2, 3]);
+
+  /// Candy: patches of caramel and chocolate. The gummy bears are the same
+  /// patrollers as the ocean's jellyfish ([jellyCount]).
+  int get gooCount => _pick(const [4, 5, 6, 7, 8]);
+
+  /// Candy: gummy worms that wriggle up across the corridor, and seconds
+  /// from one appearance to the next.
+  int get wormCount => _pick(const [1, 2, 2, 3, 3]);
+  double get wormPeriod => _pick(const [7.0, 6.5, 6.0, 5.5, 5.0]);
+
+  /// Shifting maze: doors that close and open again, and how long they stay
+  /// open and shut. Never all at once, and never so that the way is cut.
+  int get doorCount => _pick(const [20, 30, 40, 50, 60]);
+  double get doorOpenSeconds => _pick(const [6.5, 6.0, 5.5, 5.0, 4.5]);
+  double get doorClosedSeconds => _pick(const [4.0, 4.5, 5.0, 5.5, 6.0]);
 
   /// Underground: how far the ball lights the way.
   double get lightRadius => _pick(const [3.6, 3.2, 2.9, 2.6, 2.3]);

@@ -293,7 +293,7 @@ void main() {
     final g = GameController(GameController.endlessConfig(0, BallKind.wood, world: WorldKind.space),
         endless: true, seed: 2);
     // The constructor draws a random world; force a ship maze from the start.
-    for (var i = 0; i < 40 && g.config.world != WorldKind.space; i++) {
+    for (var i = 0; i < 300 && g.config.world != WorldKind.space; i++) {
       g.resetRun();
     }
     expect(g.config.world, WorldKind.space);

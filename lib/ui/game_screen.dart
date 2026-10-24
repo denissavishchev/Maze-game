@@ -453,6 +453,10 @@ class _BonusButton extends StatelessWidget {
         WorldKind.graveyard => Icons.church_rounded,
         WorldKind.glass => Icons.change_history_rounded,
         WorldKind.ocean => Icons.anchor_rounded,
+        WorldKind.volcano => Icons.ac_unit_rounded,
+        WorldKind.factory => Icons.front_hand_rounded,
+        WorldKind.candy => Icons.eco_rounded,
+        WorldKind.shifting => Icons.visibility_rounded,
       };
 
   @override

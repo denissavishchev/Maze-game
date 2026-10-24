@@ -37,7 +37,7 @@ void main() {
 
   test('the first world is random, and no world repeats one of the last three', () {
     final firsts = <WorldKind>{};
-    for (var seed = 0; seed < 40; seed++) {
+    for (var seed = 0; seed < 100; seed++) {
       final g = GameController(GameController.endlessConfig(0, BallKind.wood),
           endless: true, seed: seed);
       firsts.add(g.config.world);

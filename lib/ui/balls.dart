@@ -143,24 +143,50 @@ _Marks _marksOf(BallKind kind) => _marksCache.putIfAbsent(kind, () {
               ),
           ]);
         case BallKind.paper:
-          // Creases of a crumpled sheet: short, crooked, in every direction.
+          // An old sheet crushed hard: many sharp creases, dark ones with
+          // pale ridges beside them, plus brown age spots.
+          _Line crease(Color color, double width, int steps, double reach) {
+            final a = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                rnd.nextDouble() * 2 - 1);
+            final b = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                rnd.nextDouble() * 2 - 1);
+            return _Line([
+              for (var i = 0; i <= steps; i++)
+                _unit(
+                  a[0] + (b[0] - a[0]) * i / steps * reach + (rnd.nextDouble() - 0.5) * 0.18,
+                  a[1] + (b[1] - a[1]) * i / steps * reach + (rnd.nextDouble() - 0.5) * 0.18,
+                  a[2] + (b[2] - a[2]) * i / steps * reach + (rnd.nextDouble() - 0.5) * 0.18,
+                ),
+            ], color, width);
+          }
+
           return _Marks([
-            for (var k = 0; k < 9; k++)
-              () {
-                final a = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
-                    rnd.nextDouble() * 2 - 1);
-                final b = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
-                    rnd.nextDouble() * 2 - 1);
-                return _Line([
-                  for (var i = 0; i <= 5; i++)
-                    _unit(
-                      a[0] + (b[0] - a[0]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
-                      a[1] + (b[1] - a[1]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
-                      a[2] + (b[2] - a[2]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
-                    ),
-                ], const Color(0xFF8A8576).withValues(alpha: 0.55), 0.05);
-              }(),
-          ], const []);
+            for (var k = 0; k < 16; k++)
+              crease(const Color(0xFF6B5A3A).withValues(alpha: 0.6), 0.06, 5, 0.8),
+            for (var k = 0; k < 14; k++)
+              crease(const Color(0xFFFFF8E0).withValues(alpha: 0.6), 0.05, 4, 0.7),
+          ], [
+            for (var i = 0; i < 9; i++)
+              _Dot(
+                _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                    rnd.nextDouble() * 2 - 1),
+                const Color(0xFF9A7B3F).withValues(alpha: 0.28),
+                0.09 + rnd.nextDouble() * 0.12,
+              ),
+          ]);
+        case BallKind.chameleon:
+          // A grid like a globe: parallels round the poles and meridians
+          // through them, all the same dark so it shows on any colour.
+          final pole = _unit(0, 1, 0);
+          final grid = Colors.black.withValues(alpha: 0.32);
+          return _Marks([
+            for (var k = 1; k < 6; k++) _Line(_ring(pole, k * pi / 6), grid, 0.045),
+            for (var k = 0; k < 6; k++)
+              _Line(_ring(_unit(cos(k * pi / 6), 0, sin(k * pi / 6)), pi / 2), grid, 0.045),
+          ], [
+            _Dot(pole, Colors.black.withValues(alpha: 0.4), 0.07),
+            _Dot(_unit(0, -1, 0), Colors.black.withValues(alpha: 0.4), 0.07),
+          ]);
         case BallKind.bubble:
           // Drifting colour bands of the soap film, and a faint ring.
           return _Marks([
@@ -200,7 +226,7 @@ final Rot _resting = restingRot();
 
 /// Draws a ball of the given material centred on [p] with radius [r]. [rot] is
 /// its orientation (see `rollRot`); without it the ball is drawn at rest.
-void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
+void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot, double hue = 120]) {
   final m = rot ?? _resting;
   final light = p.translate(-r * 0.35, -r * 0.4);
 
@@ -232,8 +258,34 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
       c.drawCircle(p, r,
           sphere(const [Color(0xFFC4C4BB), Color(0xFF7D7D75), Color(0xFF3C3C37)], const [0, 0.55, 1]));
     case BallKind.paper:
-      c.drawCircle(p, r,
-          sphere(const [Color(0xFFFFFFFF), Color(0xFFF1EDDF), Color(0xFFB5AF9B)], const [0, 0.55, 1]));
+      // Crushed paper is lumpy, not round.
+      final lump = Random(5);
+      final edge = [
+        for (var i = 0; i < 14; i++)
+          p +
+              Offset.fromDirection(i * 2 * pi / 14, r * (0.88 + lump.nextDouble() * 0.16)),
+      ];
+      final mid = [
+        for (var i = 0; i < edge.length; i++)
+          (edge[i] + edge[(i + 1) % edge.length]) / 2,
+      ];
+      final outline = Path()..moveTo(mid.last.dx, mid.last.dy);
+      for (var i = 0; i < edge.length; i++) {
+        outline.quadraticBezierTo(edge[i].dx, edge[i].dy, mid[i].dx, mid[i].dy);
+      }
+      c.drawPath(
+          outline,
+          sphere(const [Color(0xFFF6EBC8), Color(0xFFD9C78F), Color(0xFF7E6A3C)], const [0, 0.55, 1]));
+    case BallKind.chameleon:
+      // Any colour at all, shaded like the rest.
+      c.drawCircle(
+          p,
+          r,
+          sphere([
+            HSVColor.fromAHSV(1, hue % 360, 0.3, 1).toColor(),
+            HSVColor.fromAHSV(1, hue % 360, 0.75, 0.88).toColor(),
+            HSVColor.fromAHSV(1, hue % 360, 0.95, 0.45).toColor(),
+          ], const [0, 0.55, 1]));
     case BallKind.bubble:
       // Nearly clear, a little pearly at the rim.
       c.drawCircle(p, r, Paint()..color = const Color(0xFFBFEFFF).withValues(alpha: 0.12));
@@ -359,7 +411,8 @@ class _BubblePainter extends CustomPainter {
     // Rolling to the right on the spot, slightly tilted so every marking
     // passes over the face.
     final rot = turnRot(restingRot(), 0.3, 1, 0.15, roll.value * 2 * pi);
-    paintBall(canvas, size.center(Offset.zero), r, kind, rot);
+    // On the selection screen the chameleon cycles through every colour.
+    paintBall(canvas, size.center(Offset.zero), r, kind, rot, roll.value * 720);
   }
 
   @override

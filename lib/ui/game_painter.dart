@@ -131,6 +131,18 @@ class GamePainter extends CustomPainter {
     for (final m in game.mud) {
       _mud(canvas, m, t);
     }
+    for (final g in game.goos) {
+      _goo(canvas, g, t);
+    }
+    for (final b in game.belts) {
+      _belt(canvas, b, t);
+    }
+    for (final w in game.worms) {
+      _worm(canvas, w, t);
+    }
+    for (final tt in game.turntables) {
+      _turntable(canvas, tt, t);
+    }
     _goal(canvas, t);
     for (var j = 0; j < game.maze.gateCount; j++) {
       _button(canvas, j);
@@ -144,11 +156,37 @@ class GamePainter extends CustomPainter {
     for (final a in game.airlocks) {
       _airlock(canvas, a, t);
     }
+    for (final m in game.magnets) {
+      _magnet(canvas, m, t);
+    }
+    for (final p in game.presses) {
+      _press(canvas, p, t);
+    }
+    for (final p in game.pendulums) {
+      _pendulum(canvas, p, t);
+    }
+    for (final d in game.doors) {
+      _door(canvas, d, t);
+    }
     for (final k in game.cracks) {
       _crack(canvas, k, t);
     }
+    for (final k in game.crusts) {
+      _crust(canvas, k, t);
+    }
+    for (final g in game.geysers) {
+      _geyser(canvas, g, t);
+    }
+    for (final l in game.lavas) {
+      _lava(canvas, l, t);
+    }
     for (final j in game.jellies) {
-      _jelly(canvas, j, t);
+      switch (game.config.world) {
+        case WorldKind.candy:
+          _gummy(canvas, j, t);
+        default:
+          _jelly(canvas, j, t);
+      }
     }
     for (final l in game.lasers) {
       _laser(canvas, l, t);
@@ -493,6 +531,69 @@ class GamePainter extends CustomPainter {
             );
           }
         }
+      case WorldKind.factory:
+        // A hazard-striped plate with a big red push button.
+        disc(r + 0.03, const Color(0xFF2B2F36), const Color(0xFF15181C));
+        disc(r - 0.03, const Color(0xFFE0A526), const Color(0xFF9A6E10));
+        for (var i = 0; i < 8; i++) {
+          final a = i * pi / 4;
+          c.drawLine(p + polar(0.2, a), p + polar(0.3, a + 0.2),
+              Paint()..color = dim(const Color(0xFF2B2F36))..strokeWidth = 0.05..strokeCap = StrokeCap.round);
+        }
+        disc(0.15, const Color(0xFF3A1010), const Color(0xFF1A0808));
+        disc(used ? 0.11 : 0.13, const Color(0xFFFF6A5A), const Color(0xFFB02020));
+        if (!used) {
+          c.drawCircle(p.translate(-0.04, -0.04), 0.035, Paint()..color = Colors.white.withValues(alpha: 0.6));
+        }
+      case WorldKind.candy:
+        // A swirled sweet.
+        disc(r + 0.03, const Color(0xFFB0285F), const Color(0xFF7A1840));
+        disc(r - 0.03, const Color(0xFFFFE3F1), const Color(0xFFFF9AC4));
+        final swirl = Path()..moveTo(p.dx, p.dy);
+        for (var k = 1; k <= 30; k++) {
+          final a = k * 0.55;
+          final rad = 0.22 * k / 30;
+          swirl.lineTo(p.dx + cos(a) * rad, p.dy + sin(a) * rad);
+        }
+        c.drawPath(swirl, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.05..strokeCap = StrokeCap.round..color = dim(const Color(0xFFFF4F9A)));
+      case WorldKind.shifting:
+        // A rune pad that glows until pressed.
+        disc(r + 0.03, const Color(0xFF241A4A), const Color(0xFF110A28));
+        disc(r - 0.03, const Color(0xFF5B4B9A), const Color(0xFF332A66));
+        final glow = used ? const Color(0xFF4A4270) : const Color(0xFFD9CCFF);
+        c.drawCircle(p, 0.2, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.035..color = glow);
+        final tri = Path();
+        for (var k = 0; k < 3; k++) {
+          final q = p + polar(0.14, k * 2 * pi / 3 - pi / 2);
+          k == 0 ? tri.moveTo(q.dx, q.dy) : tri.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(tri..close(), Paint()..style = PaintingStyle.stroke..strokeWidth = 0.035..strokeJoin = StrokeJoin.round..color = glow);
+        if (!used) {
+          c.drawCircle(p, 0.3, Paint()..shader = ui.Gradient.radial(p, 0.3, [
+            const Color(0xFFA98BFF).withValues(alpha: 0.4),
+            const Color(0xFFA98BFF).withValues(alpha: 0),
+          ]));
+        }
+      case WorldKind.volcano:
+        // An obsidian plate with a flame that burns until pressed.
+        disc(r + 0.03, const Color(0xFF2A1512), const Color(0xFF120807));
+        disc(r - 0.03, const Color(0xFF5E4038), const Color(0xFF34201C));
+        final flame = Path()
+          ..moveTo(p.dx, p.dy - 0.2)
+          ..quadraticBezierTo(p.dx + 0.17, p.dy - 0.02, p.dx + 0.1, p.dy + 0.12)
+          ..quadraticBezierTo(p.dx, p.dy + 0.2, p.dx - 0.1, p.dy + 0.12)
+          ..quadraticBezierTo(p.dx - 0.16, p.dy - 0.02, p.dx, p.dy - 0.2)
+          ..close();
+        if (!used) {
+          c.drawCircle(p, 0.3, Paint()..shader = ui.Gradient.radial(p, 0.3, [
+            const Color(0xFFFF7A2E).withValues(alpha: 0.4),
+            const Color(0xFFFF7A2E).withValues(alpha: 0),
+          ]));
+        }
+        c.drawPath(flame, Paint()..color = used ? const Color(0xFF4A3530) : const Color(0xFFFF7A2E));
+        if (!used) {
+          c.drawCircle(p.translate(0, 0.06), 0.06, Paint()..color = const Color(0xFFFFE08A));
+        }
       case WorldKind.space:
         final glow = used ? 0.0 : 0.5 + 0.5 * sin(t * 4 + j);
         c.drawCircle(
@@ -618,6 +719,36 @@ class GamePainter extends CustomPainter {
         );
         c.drawLine(p.translate(-0.2, 0.0), p.translate(-0.04, 0.02), line);
         c.drawLine(p.translate(0.05, 0.02), p.translate(0.2, 0.09), line..color = const Color(0xFFFF6B9D));
+      case WorldKind.factory:
+        // A stop sign: the machines halt.
+        final stop = Path();
+        for (var i = 0; i < 8; i++) {
+          final q = p + polar(0.16, i * pi / 4 + pi / 8);
+          i == 0 ? stop.moveTo(q.dx, q.dy) : stop.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(stop..close(), line);
+        c.drawLine(p.translate(-0.07, 0), p.translate(0.07, 0), line);
+      case WorldKind.candy:
+        // A peppermint: a disc with swirled stripes.
+        c.drawCircle(p, 0.14, line);
+        for (var i = 0; i < 3; i++) {
+          final a = i * 2 * pi / 3;
+          c.drawArc(Rect.fromCircle(center: p + polar(0.07, a), radius: 0.07), a, pi, false, line);
+        }
+      case WorldKind.shifting:
+        // An eye: the moving walls show themselves.
+        final eye = Path()
+          ..moveTo(p.dx - 0.17, p.dy)
+          ..quadraticBezierTo(p.dx, p.dy - 0.2, p.dx + 0.17, p.dy)
+          ..quadraticBezierTo(p.dx, p.dy + 0.2, p.dx - 0.17, p.dy);
+        c.drawPath(eye, line);
+        c.drawCircle(p, 0.05, Paint()..color = Colors.white);
+      case WorldKind.volcano:
+        // A snowflake: the lava, the steam and the crust cool down.
+        for (var i = 0; i < 3; i++) {
+          final a = i * pi / 3 + pi / 2;
+          c.drawLine(p + polar(0.17, a), p + polar(0.17, a + pi), line);
+        }
       case WorldKind.space:
         // Crosshair: the stabilizer holds the ball steady.
         c.drawCircle(p, 0.1, line);
@@ -1075,6 +1206,743 @@ class GamePainter extends CustomPainter {
     }
   }
 
+  // ---- factory ----------------------------------------------------------
+
+  /// A conveyor belt across the corridor: chevrons run along it, and blink red
+  /// just before it reverses.
+  void _belt(Canvas c, Belt b, double t) {
+    final dir = game.beltDir(b);
+    c.save();
+    c.translate(b.center.dx, b.center.dy);
+    c.rotate(b.along.direction);
+    final body = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset.zero, width: 1.0, height: 0.62), const Radius.circular(0.12));
+    c.drawRRect(body.shift(const Offset(0.03, 0.06)), Paint()..color = Colors.black.withValues(alpha: 0.3));
+    c.drawRRect(body.inflate(0.05), Paint()..color = Palette.ink);
+    c.drawRRect(body, Paint()..color = const Color(0xFF353C46));
+    // Hazard rails along both sides.
+    for (final side in [-0.26, 0.26]) {
+      for (var x = -0.46; x < 0.46; x += 0.16) {
+        c.drawLine(Offset(x, side), Offset(x + 0.08, side),
+            Paint()..strokeWidth = 0.07..color = const Color(0xFFE0A526));
+      }
+    }
+    if (dir != 0) {
+      final reversing = game.beltReversing(b);
+      final tint = reversing && sin(t * 20) > 0 ? const Color(0xFFFF5A4A) : const Color(0xFFFFC94A);
+      final arrow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = 0.06
+        ..color = tint.withValues(alpha: 0.9);
+      for (var i = 0; i < 4; i++) {
+        final k = (i / 4 + t * 0.4 * dir) % 1.0;
+        final x = (k - 0.5) * 0.9;
+        c.drawPath(
+          Path()
+            ..moveTo(x - 0.06 * dir, -0.1)
+            ..lineTo(x + 0.06 * dir, 0)
+            ..lineTo(x - 0.06 * dir, 0.1),
+          arrow,
+        );
+      }
+    } else {
+      c.drawCircle(Offset.zero, 0.06, Paint()..color = const Color(0xFF8995AA));
+    }
+    c.restore();
+  }
+
+  /// A press: pistons in the walls and a faint stripe-edged square while it is
+  /// raised, a blinking red square as it comes down, a steel plate when it
+  /// slams.
+  void _press(Canvas c, Press p, double t) {
+    final phase = game.pressPhase(p);
+    c.save();
+    c.translate(p.center.dx, p.center.dy);
+    c.rotate(p.along.direction);
+    final pad = Rect.fromCenter(center: Offset.zero, width: 0.62, height: 0.7);
+    if (phase == 2) {
+      c.drawRect(pad.shift(const Offset(0.03, 0.06)), Paint()..color = Colors.black.withValues(alpha: 0.4));
+      c.drawRect(pad.inflate(0.05), Paint()..color = Palette.ink);
+      c.drawRect(pad, Paint()..color = const Color(0xFF9AA5B5));
+      for (var y = pad.top + 0.04; y < pad.bottom - 0.08; y += 0.14) {
+        c.drawLine(Offset(pad.left, y + 0.1), Offset(pad.right, y),
+            Paint()..strokeWidth = 0.06..color = const Color(0xFFE0A526));
+      }
+      for (final q in [pad.topLeft, pad.topRight, pad.bottomLeft, pad.bottomRight]) {
+        c.drawCircle(Offset.lerp(q, Offset.zero, 0.18)!, 0.025, Paint()..color = Palette.ink);
+      }
+    } else {
+      final warn = phase == 1;
+      final on = !warn || sin(t * 18) > 0;
+      final tint = warn ? const Color(0xFFFF4040) : const Color(0xFFE0A526);
+      c.drawRect(pad, Paint()..color = tint.withValues(alpha: warn ? (on ? 0.3 : 0.08) : 0.08));
+      c.drawRect(
+        pad,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.04
+          ..color = tint.withValues(alpha: warn ? (on ? 0.95 : 0.3) : 0.3),
+      );
+    }
+    // The pistons in the walls.
+    for (final side in [-1.0, 1.0]) {
+      final piston = Rect.fromCenter(center: Offset(0, side * 0.5), width: 0.28, height: 0.16);
+      c.drawRect(piston.inflate(0.03), Paint()..color = Palette.ink);
+      c.drawRect(piston, Paint()..color = const Color(0xFF8995AA));
+    }
+    c.restore();
+  }
+
+  /// An electromagnet: a horseshoe that glows red and blue while it pulls,
+  /// with field rings drawn in towards it.
+  void _magnet(Canvas c, Magnet m, double t) {
+    final phase = game.magnetPhase(m);
+    if (phase == 2) {
+      c.drawCircle(
+        m.pos,
+        GameController.magnetReach,
+        Paint()
+          ..shader = ui.Gradient.radial(m.pos, GameController.magnetReach, [
+            const Color(0xFF8E6BFF).withValues(alpha: 0.18),
+            const Color(0xFF8E6BFF).withValues(alpha: 0),
+          ]),
+      );
+      for (var i = 0; i < 3; i++) {
+        final k = (t * 0.8 + i / 3) % 1.0;
+        c.drawCircle(
+          m.pos,
+          GameController.magnetReach * (1 - k),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.035
+            ..color = const Color(0xFFB9A6FF).withValues(alpha: 0.5 * k),
+        );
+      }
+    } else if (phase == 1 && sin(t * 16) > 0) {
+      c.drawCircle(m.pos, 0.42, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.04..color = const Color(0xFFFFC94A));
+    }
+    final on = phase == 2;
+    c.drawCircle(m.pos.translate(0.03, 0.06), 0.3, Paint()..color = Colors.black.withValues(alpha: 0.3));
+    c.drawCircle(m.pos, 0.3, Paint()..color = Palette.ink);
+    c.drawCircle(m.pos, 0.25, Paint()..color = const Color(0xFF59627A));
+    final shoe = Path()
+      ..moveTo(m.pos.dx - 0.13, m.pos.dy + 0.12)
+      ..lineTo(m.pos.dx - 0.13, m.pos.dy - 0.02)
+      ..arcToPoint(Offset(m.pos.dx + 0.13, m.pos.dy - 0.02), radius: const Radius.circular(0.13))
+      ..lineTo(m.pos.dx + 0.13, m.pos.dy + 0.12);
+    c.drawPath(shoe, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.11..strokeCap = StrokeCap.butt..color = Palette.ink);
+    c.drawPath(shoe, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.07..strokeCap = StrokeCap.butt..color = const Color(0xFFC8D0DC));
+    c.drawLine(m.pos.translate(-0.13, 0.1), m.pos.translate(-0.13, 0.15),
+        Paint()..strokeWidth = 0.07..color = on ? const Color(0xFFFF4040) : const Color(0xFF8A4A4A));
+    c.drawLine(m.pos.translate(0.13, 0.1), m.pos.translate(0.13, 0.15),
+        Paint()..strokeWidth = 0.07..color = on ? const Color(0xFF4F8CFF) : const Color(0xFF4A5A8A));
+  }
+
+  /// A turntable: a toothed disc that turns the floor under the ball, with
+  /// arrows round it showing which way, blinking red before it reverses.
+  void _turntable(Canvas c, Turntable tt, double t) {
+    final dir = game.turntableDir(tt);
+    final reversing = game.turntableReversing(tt);
+    final spin = dir == 0 ? tt.phase : t * 1.3 * dir + tt.phase;
+    const r = GameController.turntableReach;
+    c.drawCircle(tt.pos.translate(0.03, 0.06), r, Paint()..color = Colors.black.withValues(alpha: 0.28));
+    c.drawCircle(tt.pos, r, Paint()..color = Palette.ink);
+    c.drawCircle(tt.pos, r - 0.05, Paint()..color = const Color(0xFF414A56));
+    // Teeth round the rim, turning.
+    for (var i = 0; i < 12; i++) {
+      final a = spin + i * pi / 6;
+      c.drawLine(tt.pos + polar(r - 0.16, a), tt.pos + polar(r - 0.06, a),
+          Paint()..strokeWidth = 0.07..strokeCap = StrokeCap.butt..color = const Color(0xFF8995AA));
+    }
+    c.drawCircle(tt.pos, 0.1, Paint()..color = Palette.ink);
+    c.drawCircle(tt.pos, 0.06, Paint()..color = const Color(0xFFE0A526));
+    if (dir != 0) {
+      final tint = reversing && sin(t * 20) > 0 ? const Color(0xFFFF5A4A) : const Color(0xFFFFC94A);
+      final arrow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 0.055
+        ..color = tint.withValues(alpha: 0.9);
+      for (var i = 0; i < 2; i++) {
+        final a0 = i * pi + 0.3;
+        c.drawArc(Rect.fromCircle(center: tt.pos, radius: 0.27), a0, dir * 1.7, false, arrow);
+        final tip = a0 + dir * 1.7;
+        final at = tt.pos + polar(0.27, tip);
+        final back = tip - dir * 0.5;
+        c.drawLine(at, tt.pos + polar(0.34, back), arrow);
+        c.drawLine(at, tt.pos + polar(0.2, back), arrow);
+      }
+    }
+  }
+
+  /// A wrecking ball on a rail across the corridor, swinging from side to
+  /// side. Its reach is ringed, and it hangs still while the stop holds.
+  void _pendulum(Canvas c, Pendulum p, double t) {
+    final across = game.pendulumAcross(p);
+    c.save();
+    c.translate(p.center.dx, p.center.dy);
+    c.rotate(p.along.direction);
+    final rail = Paint()..strokeCap = StrokeCap.round;
+    c.drawLine(const Offset(0, -0.5), const Offset(0, 0.5), rail..strokeWidth = 0.1..color = Palette.ink);
+    c.drawLine(const Offset(0, -0.5), const Offset(0, 0.5), rail..strokeWidth = 0.05..color = const Color(0xFF8995AA));
+    for (final end in [-0.5, 0.5]) {
+      c.drawCircle(Offset(0, end), 0.07, Paint()..color = Palette.ink);
+      c.drawCircle(Offset(0, end), 0.045, Paint()..color = const Color(0xFFE0A526));
+    }
+    final bob = Offset(0, across);
+    if (game.bonusLeft <= 0) {
+      c.drawCircle(bob, GameController.pendulumBob + 0.12,
+          Paint()..color = const Color(0xFFFF4040).withValues(alpha: 0.12));
+    }
+    c.drawCircle(bob.translate(0.03, 0.06), GameController.pendulumBob, Paint()..color = Colors.black.withValues(alpha: 0.35));
+    c.drawCircle(bob, GameController.pendulumBob + 0.04, Paint()..color = Palette.ink);
+    c.drawCircle(
+      bob,
+      GameController.pendulumBob,
+      Paint()
+        ..shader = ui.Gradient.radial(bob.translate(-0.05, -0.05), GameController.pendulumBob * 1.6, const [
+          Color(0xFFB8C0CC),
+          Color(0xFF3A414C),
+        ]),
+    );
+    c.drawCircle(bob.translate(-0.06, -0.06), 0.04, Paint()..color = Colors.white.withValues(alpha: 0.7));
+    c.restore();
+  }
+
+  // ---- candy ------------------------------------------------------------
+
+  /// Caramel and chocolate. Caramel (and chocolate while it is melted) is a
+  /// glossy sticky puddle; set chocolate is a matte square-ribbed slab.
+  void _goo(Canvas c, Goo g, double t) {
+    final sticky = game.gooSticky(g);
+    final caramel = !g.melts;
+    final base = caramel ? const Color(0xFFD98A1F) : const Color(0xFF5B3321);
+    final hi = caramel ? const Color(0xFFFFD27A) : const Color(0xFF9A6444);
+    const n = 16;
+    final path = Path();
+    for (var i = 0; i < n; i++) {
+      final a = i * kTwoPi / n;
+      final wob = sticky ? 1 + 0.07 * sin(t * 2 + i * 1.9 + g.phase) : 1 + 0.02 * sin(i * 1.9);
+      final q = g.pos + polar(g.radius * wob, a);
+      i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+    }
+    path.close();
+    c.drawPath(path.shift(const Offset(0.03, 0.06)), Paint()..color = Colors.black.withValues(alpha: 0.3));
+    c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.08..strokeJoin = StrokeJoin.round..color = Palette.ink);
+    c.drawPath(
+      path,
+      Paint()
+        ..shader = ui.Gradient.radial(g.pos.translate(-0.1, -0.1), g.radius * 1.3, [
+          sticky ? hi : Color.lerp(hi, Colors.white, 0.1)!,
+          base,
+        ]),
+    );
+    if (sticky) {
+      // A shine, and a bubble rising now and then.
+      c.drawOval(
+        Rect.fromCenter(center: g.pos.translate(-0.12, -0.14), width: 0.26, height: 0.11),
+        Paint()..color = Colors.white.withValues(alpha: 0.5),
+      );
+      final k = (t * 0.4 + g.phase) % 1.0;
+      c.drawCircle(g.pos.translate(0.1, 0.08), 0.03 + 0.04 * k,
+          Paint()..color = Colors.white.withValues(alpha: 0.5 * (1 - k)));
+    } else {
+      // A set slab: ribs like a bar of chocolate.
+      final rib = Paint()..strokeWidth = 0.03..color = Colors.black.withValues(alpha: 0.35);
+      c.drawLine(g.pos.translate(-g.radius * 0.8, 0), g.pos.translate(g.radius * 0.8, 0), rib);
+      c.drawLine(g.pos.translate(0, -g.radius * 0.8), g.pos.translate(0, g.radius * 0.8), rib);
+    }
+  }
+
+  /// A gummy worm: a mound that bulges and shivers under the floor, then a
+  /// striped worm wriggling across the corridor, then gone.
+  void _worm(Canvas c, Worm w, double t) {
+    final phase = game.wormPhase(w);
+    c.save();
+    c.translate(w.center.dx, w.center.dy);
+    c.rotate(w.along.direction);
+    if (phase == 0) {
+      // A little hole with a sprinkle of sugar round it.
+      c.drawOval(Rect.fromCenter(center: Offset.zero, width: 0.2, height: 0.32),
+          Paint()..color = const Color(0xFFB07A8C).withValues(alpha: 0.5));
+      c.restore();
+      return;
+    }
+    const hues = [Color(0xFF7CE08A), Color(0xFFFFA630), Color(0xFFFF4F9A), Color(0xFFFFE04A)];
+    final hue = hues[(w.center.dx * 5 + w.center.dy * 9).abs().floor() % hues.length];
+    final out = phase == 2;
+    // How much of the worm is up, 0 to 1.
+    final up = out ? 1.0 : 0.25 + 0.2 * sin(t * 18);
+    final half = 0.5 * up;
+    const n = 18;
+    Offset at(int i) {
+      final u = (i / n - 0.5) * 2 * half;
+      return Offset(sin(t * 6 + i * 0.7) * 0.07 * up, u);
+    }
+
+    if (!out) {
+      c.drawOval(Rect.fromCenter(center: Offset.zero, width: 0.34, height: 0.7 * up + 0.2),
+          Paint()..color = Colors.black.withValues(alpha: 0.25));
+    }
+    for (var i = 0; i < n; i++) {
+      final a = at(i), b = at(i + 1);
+      c.drawLine(a, b, Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.31..color = Palette.ink);
+    }
+    for (var i = 0; i < n; i++) {
+      final a = at(i), b = at(i + 1);
+      c.drawLine(a, b,
+          Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.23..color = i.isEven ? hue : Color.lerp(hue, Colors.white, 0.55)!);
+      c.drawLine(a.translate(-0.05, 0), b.translate(-0.05, 0),
+          Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.05..color = Colors.white.withValues(alpha: 0.5));
+    }
+    if (out) {
+      // The head at one end, with two eyes.
+      final head = at(n);
+      c.drawCircle(head, 0.17, Paint()..color = Palette.ink);
+      c.drawCircle(head, 0.14, Paint()..color = hue);
+      for (final dx in [-0.05, 0.05]) {
+        c.drawCircle(head.translate(0.04, dx), 0.03, Paint()..color = Colors.white);
+        c.drawCircle(head.translate(0.05, dx), 0.015, Paint()..color = Palette.ink);
+      }
+    }
+    c.restore();
+  }
+
+  /// A gummy bear: a translucent jelly body with ears, hopping along its
+  /// route, inside a ring that shows how far it reaches.
+  void _gummy(Canvas c, Jellyfish j, double t) {
+    const reach = GameController.jellyReach;
+    const hues = [Color(0xFFFF3B5C), Color(0xFF55D66B), Color(0xFFFF9F2E), Color(0xFFFFE04A)];
+    final hue = hues[(j.home.dx * 7 + j.home.dy * 13).abs().floor() % hues.length];
+    final glow = 0.45 + 0.55 * j.glow;
+    final hop = (sin(t * 6 + j.home.dx) * 0.5 + 0.5) * 0.05;
+    final p = j.pos.translate(0, -hop);
+    c.drawCircle(
+      j.pos,
+      reach,
+      Paint()
+        ..shader = ui.Gradient.radial(j.pos, reach, [
+          hue.withValues(alpha: 0.1 + 0.2 * glow),
+          hue.withValues(alpha: 0),
+        ], const [0.5, 1]),
+    );
+    c.drawCircle(j.pos, reach, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.03..color = hue.withValues(alpha: 0.25 + 0.35 * glow));
+    c.drawOval(Rect.fromCenter(center: j.pos.translate(0, 0.2), width: 0.4, height: 0.12),
+        Paint()..color = Colors.black.withValues(alpha: 0.25));
+    void blob(Offset at, double r) {
+      c.drawCircle(at, r + 0.04, Paint()..color = Palette.ink);
+    }
+
+    final parts = [
+      (p.translate(0, 0.07), 0.15),
+      (p.translate(-0.15, 0.1), 0.07),
+      (p.translate(0.15, 0.1), 0.07),
+      (p.translate(-0.09, 0.2), 0.07),
+      (p.translate(0.09, 0.2), 0.07),
+      (p.translate(0, -0.13), 0.12),
+      (p.translate(-0.1, -0.24), 0.045),
+      (p.translate(0.1, -0.24), 0.045),
+    ];
+    for (final (at, r) in parts) {
+      blob(at, r);
+    }
+    for (final (at, r) in parts) {
+      c.drawCircle(at, r, Paint()..color = hue);
+    }
+    c.drawCircle(p.translate(-0.05, -0.18), 0.04, Paint()..color = Colors.white.withValues(alpha: 0.7));
+    c.drawCircle(p.translate(-0.05, 0.03), 0.045, Paint()..color = Colors.white.withValues(alpha: 0.35));
+    final eye = Paint()..color = Palette.ink;
+    c.drawCircle(p.translate(-0.04, -0.14), 0.017, eye);
+    c.drawCircle(p.translate(0.04, -0.14), 0.017, eye);
+    c.drawArc(Rect.fromCenter(center: p.translate(0, -0.1), width: 0.07, height: 0.05), 0.2, pi - 0.4, false,
+        Paint()..style = PaintingStyle.stroke..strokeWidth = 0.015..color = Palette.ink);
+  }
+
+  // ---- shifting maze ----------------------------------------------------
+
+  /// A door in a passage. Shut, it is drawn exactly like the maze's own walls,
+  /// so nothing tells the two apart; it grows in and fades out rather than
+  /// popping, and just before it shuts a ghost of the wall flickers.
+  void _door(Canvas c, ShiftDoor d, double t) {
+    if (game.doorsRevealed) _doorVision(c, d, t);
+    var a = d.shown;
+    if (d.state == 1) a = max(a, 0.15 + 0.25 * (0.5 + 0.5 * sin(t * 12)));
+    if (a <= 0.01) return;
+    final path = game.maze.edgePath(d.edge);
+    Paint stroke(Color color, double w) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = w
+      ..color = color.withValues(alpha: color.a * a);
+    c.save();
+    c.translate(0.07, 0.12);
+    c.drawPath(path, stroke(Colors.black.withValues(alpha: 0.35), 0.48));
+    c.restore();
+    c.drawPath(path, stroke(Palette.ink, 0.45));
+    c.drawPath(path, stroke(theme.wallBase, 0.37));
+    c.drawPath(path, stroke(theme.wallMain, 0.29));
+    c.save();
+    c.translate(-0.02, -0.05);
+    c.drawPath(path, stroke(theme.wallHi.withValues(alpha: 0.8), 0.08));
+    c.restore();
+    // The joints of the stonework, as along the maze's own walls.
+    final joint = stroke(Palette.ink.withValues(alpha: 0.45), 0.03);
+    for (final metric in path.computeMetrics()) {
+      for (var at = 0.0; at < metric.length; at += 0.5) {
+        final tan = metric.getTangentForOffset(at);
+        if (tan == null) continue;
+        final n = Offset(-tan.vector.dy, tan.vector.dx);
+        c.drawLine(tan.position + n * 0.11, tan.position - n * 0.11, joint);
+      }
+    }
+  }
+
+  /// Vision: the outline of a moving wall and the seconds until it changes
+  /// (green: an open way that will shut; amber: a wall that will open).
+  void _doorVision(Canvas c, ShiftDoor d, double t) {
+    final shut = d.state == 2;
+    final tint = shut ? const Color(0xFFFFB300) : const Color(0xFF55E6C1);
+    final path = game.maze.edgePath(d.edge);
+    final pulse = 0.5 + 0.5 * sin(t * 5 + d.edge);
+    c.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 0.5
+        ..color = tint.withValues(alpha: 0.12 + 0.1 * pulse),
+    );
+    c.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 0.05
+        ..color = tint.withValues(alpha: 0.85),
+    );
+    // The countdown, only near the ball (a number on every wall is too much).
+    if ((d.center - game.pos).distance > 5.5) return;
+    final seconds = max(0, d.timer.ceil());
+    final text = TextPainter(
+      text: TextSpan(
+        text: '$seconds',
+        style: TextStyle(
+          color: tint,
+          fontSize: 0.34,
+          fontWeight: FontWeight.w900,
+          shadows: const [Shadow(color: Colors.black, blurRadius: 0.08, offset: Offset(0.02, 0.03))],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    text.paint(c, d.center - Offset(text.width / 2, text.height / 2));
+  }
+
+  // ---- volcano ----------------------------------------------------------
+
+  /// The outline of a river of lava: a rounded stretch of corridor with a
+  /// wobbling edge.
+  Path _lavaShape(LavaFlow l, double t, {double grow = 1}) {
+    const n = 28;
+    final angle = l.along.direction;
+    final path = Path();
+    for (var i = 0; i < n; i++) {
+      final a = i * kTwoPi / n;
+      final ca = cos(a), sa = sin(a);
+      // A squarish ellipse: long along the corridor, narrower across it.
+      final x = ca.sign * pow(ca.abs(), 0.6) * 0.62;
+      final y = sa.sign * pow(sa.abs(), 0.6) * 0.38;
+      final wob = 1 + 0.045 * sin(t * 2.2 + i * 1.7 + l.phase);
+      final q = Offset(x * wob * grow, y * wob * grow);
+      final r = Offset(q.dx * cos(angle) - q.dy * sin(angle), q.dx * sin(angle) + q.dy * cos(angle));
+      final at = l.center + r;
+      i == 0 ? path.moveTo(at.dx, at.dy) : path.lineTo(at.dx, at.dy);
+    }
+    return path..close();
+  }
+
+  /// Lava crusts over, glows through its cracks just before it floods, and
+  /// then runs molten.
+  void _lava(Canvas c, LavaFlow l, double t) {
+    final phase = game.lavaPhase(l);
+    final since = game.lavaTime(l) - game.config.lavaMolten;
+    final cooling = phase == 0 && game.bonusLeft <= 0 && since < 0.7;
+    final rnd = Random((l.center.dx * 977 + l.center.dy * 131).round());
+    final shape = _lavaShape(l, t);
+    final angle = l.along.direction;
+
+    // The crust: dark plates with cracks that glow with the heat below.
+    void crust(double heat) {
+      c.drawPath(shape, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.12..strokeJoin = StrokeJoin.round..color = Palette.ink);
+      c.drawPath(shape, Paint()..color = const Color(0xFF2B1B18));
+      c.save();
+      c.clipPath(shape);
+      final crack = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = 0.025 + 0.035 * heat
+        ..color = Color.lerp(const Color(0xFFC2410C), const Color(0xFFFFC94A), heat)!
+            .withValues(alpha: 0.5 + 0.5 * heat);
+      for (var i = 0; i < 9; i++) {
+        final a = rnd.nextDouble() * kTwoPi;
+        final from = l.center + polar(0.05 + rnd.nextDouble() * 0.15, a);
+        final mid = from + polar(0.2 + rnd.nextDouble() * 0.12, a + (rnd.nextDouble() - 0.5));
+        final to = mid + polar(0.18 + rnd.nextDouble() * 0.12, a + (rnd.nextDouble() - 0.5) * 1.4);
+        c.drawPath(
+          Path()
+            ..moveTo(from.dx, from.dy)
+            ..lineTo(mid.dx, mid.dy)
+            ..lineTo(to.dx, to.dy),
+          crack,
+        );
+      }
+      c.restore();
+    }
+
+    if (phase == 2) {
+      c.drawCircle(
+        l.center,
+        1.1,
+        Paint()
+          ..shader = ui.Gradient.radial(l.center, 1.1, [
+            const Color(0xFFFF6A1A).withValues(alpha: 0.4),
+            const Color(0xFFFF6A1A).withValues(alpha: 0),
+          ]),
+      );
+      c.drawPath(shape, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.12..strokeJoin = StrokeJoin.round..color = Palette.ink);
+      c.drawPath(
+        shape,
+        Paint()
+          ..shader = ui.Gradient.radial(l.center, 0.62, const [
+            Color(0xFFFFE27A),
+            Color(0xFFFF8A1F),
+            Color(0xFFD13A0E),
+          ], const [0, 0.55, 1]),
+      );
+      c.save();
+      c.clipPath(shape);
+      // Bright veins slowly flowing along the corridor, and bubbles.
+      for (var i = 0; i < 3; i++) {
+        final k = (t * 0.35 + i / 3 + l.phase) % 1.0;
+        final from = l.center + polar((k - 0.5) * 1.2, angle) + polar((i - 1) * 0.13, angle + pi / 2);
+        c.drawLine(
+          from,
+          from + polar(0.26, angle),
+          Paint()
+            ..strokeCap = StrokeCap.round
+            ..strokeWidth = 0.055
+            ..color = const Color(0xFFFFF1B0).withValues(alpha: 0.65 * sin(k * pi)),
+        );
+      }
+      for (var i = 0; i < 4; i++) {
+        final k = (t * 0.6 + i * 0.25 + l.phase) % 1.0;
+        final at = l.center + polar(0.2 * (i - 1.5), angle) + polar((rnd.nextDouble() - 0.5) * 0.3, angle + pi / 2);
+        c.drawCircle(at, 0.03 + 0.05 * k, Paint()..color = const Color(0xFFFFF1B0).withValues(alpha: 0.8 * (1 - k)));
+      }
+      c.restore();
+    } else if (phase == 1) {
+      // About to flood: the cracks flare and blink.
+      final flare = 0.55 + 0.45 * sin(t * 16);
+      c.drawCircle(
+        l.center,
+        0.9,
+        Paint()
+          ..shader = ui.Gradient.radial(l.center, 0.9, [
+            const Color(0xFFFF6A1A).withValues(alpha: 0.28 * flare),
+            const Color(0xFFFF6A1A).withValues(alpha: 0),
+          ]),
+      );
+      crust(0.6 + 0.4 * flare);
+    } else {
+      crust(0.1 + 0.08 * sin(t * 1.5 + l.phase));
+      if (cooling) {
+        // Just cooled: the molten glow fades away.
+        final fade = 1 - since / 0.7;
+        c.drawPath(shape, Paint()..color = const Color(0xFFFF8A1F).withValues(alpha: 0.7 * fade));
+      }
+    }
+  }
+
+  /// A steam vent: a crater with wisps of steam, hissing and shaking before
+  /// the jet, then a billowing column that shoves everything away.
+  void _geyser(Canvas c, Geyser g, double t) {
+    final phase = game.geyserPhase(g);
+    final k = game.geyserProgress(g);
+    final shake = phase == 1 ? Offset(sin(t * 55), cos(t * 47)) * (0.012 * k) : Offset.zero;
+    final at = g.pos + shake;
+
+    // The reach of the jet, and the part that scalds.
+    if (phase >= 1) {
+      c.drawCircle(
+        g.pos,
+        GameController.geyserReach,
+        Paint()..color = Colors.white.withValues(alpha: phase == 2 ? 0.07 : 0.03 * k),
+      );
+      c.drawCircle(
+        g.pos,
+        GameController.geyserScald,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.05
+          ..color = Colors.redAccent.withValues(alpha: phase == 2 ? 0.9 : 0.25 + 0.4 * k * (0.5 + 0.5 * sin(t * 18))),
+      );
+    }
+
+    // The crater.
+    c.drawOval(Rect.fromCenter(center: at, width: 0.74, height: 0.5), Paint()..color = Palette.ink);
+    c.drawOval(Rect.fromCenter(center: at, width: 0.62, height: 0.4), Paint()..color = const Color(0xFF4A3A36));
+    c.drawOval(
+      Rect.fromCenter(center: at.translate(0, 0.02), width: 0.4, height: 0.24),
+      Paint()
+        ..color = Color.lerp(const Color(0xFF14090A), const Color(0xFFFF7A2E), phase == 0 ? 0.0 : phase == 1 ? k : 1)!,
+    );
+
+    // Steam: lazy wisps while quiet, thick puffs while hissing, a column in
+    // the eruption.
+    final puffs = phase == 2 ? 11 : phase == 1 ? 6 : 3;
+    for (var i = 0; i < puffs; i++) {
+      final life = (t * (phase == 2 ? 1.6 : 0.5) + i / puffs + g.phase) % 1.0;
+      final spread = phase == 2 ? 0.4 : 0.14;
+      final dx = sin(i * 2.4 + g.phase) * spread * life;
+      final rise = life * (phase == 2 ? 1.1 + 0.4 * sin(k * pi) : 0.45);
+      final r = (phase == 2 ? 0.16 : 0.08) + life * (phase == 2 ? 0.34 : 0.14);
+      final alpha = (phase == 2 ? 0.7 : phase == 1 ? 0.4 : 0.22) * sin(life * pi);
+      c.drawCircle(at.translate(dx, -rise), r, Paint()..color = Colors.white.withValues(alpha: alpha));
+    }
+    if (phase == 2) {
+      // Rings of force running out from the vent.
+      for (var i = 0; i < 2; i++) {
+        final w = (t * 1.5 + i * 0.5) % 1.0;
+        c.drawCircle(
+          g.pos,
+          GameController.geyserReach * w,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.04
+            ..color = Colors.white.withValues(alpha: 0.35 * (1 - w)),
+        );
+      }
+    }
+  }
+
+  /// Thin crust: a dark plate, cracked, with the glow of lava below. It
+  /// splits wider the longer the ball stands on it, then falls in.
+  void _crust(Canvas c, Crust k, double t) {
+    final level = k.level.clamp(0.0, 1.0);
+    final rnd = Random((k.pos.dx * 733 + k.pos.dy * 199).round());
+    final shake = k.stage >= 2 ? Offset(sin(t * 60), cos(t * 53)) * 0.012 * level : Offset.zero;
+    final center = k.pos + shake;
+    final plate = Path();
+    const n = 11;
+    for (var i = 0; i < n; i++) {
+      final q = center + polar(0.4 + rnd.nextDouble() * 0.06, i * kTwoPi / n);
+      i == 0 ? plate.moveTo(q.dx, q.dy) : plate.lineTo(q.dx, q.dy);
+    }
+    plate.close();
+    final heat = 0.35 + 0.15 * sin(t * 2 + k.pos.dx) + level * 0.5;
+    c.drawCircle(
+      center,
+      0.7,
+      Paint()
+        ..shader = ui.Gradient.radial(center, 0.7, [
+          const Color(0xFFFF6A1A).withValues(alpha: 0.18 + 0.3 * level),
+          const Color(0xFFFF6A1A).withValues(alpha: 0),
+        ]),
+    );
+    c.drawPath(plate, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.08..strokeJoin = StrokeJoin.round..color = Palette.ink);
+    c.drawPath(plate, Paint()..color = const Color(0xFF33231F));
+    if (level > 0.4) {
+      // Pieces already fallen away, showing the lava.
+      final hole = Path();
+      for (var i = 0; i < 8; i++) {
+        final q = center + polar((0.08 + 0.2 * (level - 0.4)) * (0.6 + 0.4 * rnd.nextDouble()), i * kTwoPi / 8);
+        i == 0 ? hole.moveTo(q.dx, q.dy) : hole.lineTo(q.dx, q.dy);
+      }
+      c.drawPath(hole..close(), Paint()..color = const Color(0xFFFF8A1F).withValues(alpha: min(1, (level - 0.4) * 3)));
+    }
+    final crack = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 0.025 + 0.035 * level
+      ..color = Color.lerp(const Color(0xFFD9480F), const Color(0xFFFFC94A), heat.clamp(0.0, 1.0))!;
+    final lines = 4 + (level * 6).floor();
+    for (var i = 0; i < lines; i++) {
+      final a = i * kTwoPi / lines + rnd.nextDouble() * 0.5;
+      final mid = center + polar(0.14 + 0.06 * rnd.nextDouble(), a + (rnd.nextDouble() - 0.5) * 0.7);
+      final end = center + polar(0.32 + 0.06 * rnd.nextDouble(), a);
+      c.drawPath(
+        Path()
+          ..moveTo(center.dx, center.dy)
+          ..lineTo(mid.dx, mid.dy)
+          ..lineTo(end.dx, end.dy),
+        crack,
+      );
+    }
+  }
+
+  /// A volcanic bomb: a target ring on the floor and a growing shadow while
+  /// it falls, then a smouldering rock in a pool of flames that dies down.
+  void _bomb(Canvas c, Hazard h, double t, double fadeOut) {
+    if (!h.armed) {
+      final k = (h.age / h.armAt).clamp(0.0, 1.0);
+      final pulse = 0.5 + 0.5 * sin(t * 14);
+      c.drawCircle(h.pos, h.radius, Paint()..color = const Color(0xFFFF6A1A).withValues(alpha: 0.12 + 0.2 * k * pulse));
+      c.drawCircle(
+        h.pos,
+        h.radius * (1.0 - 0.5 * k),
+        Paint()
+          ..color = const Color(0xFFFF8A3A)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.06,
+      );
+      // The shadow of the bomb coming down.
+      c.drawCircle(h.pos, 0.1 + 0.3 * k, Paint()..color = Colors.black.withValues(alpha: 0.45 * k));
+      return;
+    }
+    c.drawCircle(
+      h.pos,
+      0.85,
+      Paint()
+        ..shader = ui.Gradient.radial(h.pos, 0.85, [
+          const Color(0xFFFF7A2E).withValues(alpha: 0.5 * fadeOut),
+          const Color(0xFFFF7A2E).withValues(alpha: 0),
+        ]),
+    );
+    c.drawOval(
+      Rect.fromCenter(center: h.pos.translate(0, 0.05), width: 0.95, height: 0.7),
+      Paint()..color = const Color(0xFF1A0D0A).withValues(alpha: 0.85 * fadeOut),
+    );
+    // Flames licking up around the rock.
+    for (var i = 0; i < 6; i++) {
+      final a = i * kTwoPi / 6 + 0.3;
+      final base = h.pos + polar(0.26, a);
+      final flick = 0.7 + 0.3 * sin(t * 11 + i * 2);
+      final tall = (0.3 + 0.14 * sin(i * 3.1)) * flick;
+      final flame = Path()
+        ..moveTo(base.dx - 0.09, base.dy)
+        ..quadraticBezierTo(base.dx - 0.07, base.dy - tall * 0.6, base.dx, base.dy - tall)
+        ..quadraticBezierTo(base.dx + 0.07, base.dy - tall * 0.6, base.dx + 0.09, base.dy)
+        ..close();
+      c.drawPath(flame, Paint()..color = const Color(0xFFFF6A1A).withValues(alpha: fadeOut));
+      c.drawPath(
+        flame.transform((Matrix4.identity()
+              ..translateByDouble(base.dx, base.dy, 0, 1)
+              ..scaleByDouble(0.5, 0.55, 1, 1)
+              ..translateByDouble(-base.dx, -base.dy, 0, 1))
+            .storage),
+        Paint()..color = const Color(0xFFFFD04A).withValues(alpha: fadeOut),
+      );
+    }
+    c.drawCircle(h.pos, 0.2, Paint()..color = Palette.ink.withValues(alpha: fadeOut));
+    c.drawCircle(h.pos, 0.16, Paint()..color = const Color(0xFF4A322C).withValues(alpha: fadeOut));
+    c.drawCircle(h.pos.translate(-0.04, -0.04), 0.06, Paint()..color = const Color(0xFFFF8A3A).withValues(alpha: fadeOut));
+  }
+
   // ---- hazards ----------------------------------------------------------
 
   void _hazard(Canvas c, Hazard h, double t) {
@@ -1105,6 +1973,10 @@ class GamePainter extends CustomPainter {
     }
     if (game.config.world == WorldKind.graveyard) {
       _grave(c, h, t, fadeOut);
+      return;
+    }
+    if (game.config.world == WorldKind.volcano) {
+      _bomb(c, h, t, fadeOut);
       return;
     }
     // Spikes pop out of the ground.
@@ -1286,7 +2158,7 @@ class GamePainter extends CustomPainter {
       Rect.fromCenter(center: p.translate(0.06, 0.12), width: r * 2.2, height: r * 1.7),
       Paint()..color = Colors.black.withValues(alpha: 0.4),
     );
-    paintBall(c, p, r, game.config.ball, game.ballRot);
+    paintBall(c, p, r, game.config.ball, game.ballRot, game.chameleonShown);
     if (sink > 0) {
       // Mud creeping over the ball.
       c.drawCircle(

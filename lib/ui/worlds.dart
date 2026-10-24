@@ -4,13 +4,13 @@ import '../game/world.dart';
 import '../l10n/strings.dart';
 
 /// What is scattered around the outside of the maze.
-enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard, prisms, reef }
+enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard, prisms, reef, lavaField, industry, sweets, runes }
 
 /// How the walls are drawn.
-enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull, glass, coral }
+enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull, glass, coral, basalt, industrial, candy }
 
 /// How the floor is drawn.
-enum FloorStyle { sand, flagstone, cobble, deck, ice, seabed }
+enum FloorStyle { sand, flagstone, cobble, deck, ice, seabed, basalt }
 
 class WorldTheme {
   const WorldTheme({
@@ -227,6 +227,74 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
           panelBottom: Color(0xEE082A47),
           accent: Color(0xFF3FD0E0),
         ),
+      WorldKind.volcano => const WorldTheme(
+          id: 'volcano',
+          icon: Icons.local_fire_department_rounded,
+          bg: Color(0xFF1D0E0B),
+          floor: Color(0xFF6A5149),
+          floorDark: Color(0xFF3B2A25),
+          wallBase: Color(0xFF1A0D0A),
+          wallMain: Color(0xFF3D2B28),
+          wallHi: Color(0xFFFF8A3A),
+          gate: Color(0xFFC9A66B),
+          scenery: Scenery.lavaField,
+          wallStyle: WallStyle.basalt,
+          floorStyle: FloorStyle.basalt,
+          panelTop: Color(0xEE53241A),
+          panelBottom: Color(0xEE2A1210),
+          accent: Color(0xFFFF7A2E),
+        ),
+      WorldKind.factory => const WorldTheme(
+          id: 'factory',
+          icon: Icons.precision_manufacturing_rounded,
+          bg: Color(0xFF20252B),
+          floor: Color(0xFF7C8794),
+          floorDark: Color(0xFF55606D),
+          wallBase: Color(0xFF4A3708),
+          wallMain: Color(0xFFE0A526),
+          wallHi: Color(0xFFFFE9A0),
+          gate: Color(0xFF2E9BD6),
+          scenery: Scenery.industry,
+          wallStyle: WallStyle.industrial,
+          floorStyle: FloorStyle.deck,
+          panelTop: Color(0xEE4B4231),
+          panelBottom: Color(0xEE272217),
+          accent: Color(0xFFFFB300),
+        ),
+      WorldKind.candy => const WorldTheme(
+          id: 'candy',
+          icon: Icons.cake_rounded,
+          bg: Color(0xFFFFB3D1),
+          floor: Color(0xFFFFF1DC),
+          floorDark: Color(0xFFEBC0A4),
+          wallBase: Color(0xFFB0285F),
+          wallMain: Color(0xFFFF6FA8),
+          wallHi: Color(0xFFFFE3F1),
+          gate: Color(0xFF7E57C2),
+          scenery: Scenery.sweets,
+          wallStyle: WallStyle.candy,
+          floorStyle: FloorStyle.cobble,
+          panelTop: Color(0xEE8A2F5A),
+          panelBottom: Color(0xEE4E1736),
+          accent: Color(0xFFFF4F9A),
+        ),
+      WorldKind.shifting => const WorldTheme(
+          id: 'shifting',
+          icon: Icons.open_with_rounded,
+          bg: Color(0xFF140E26),
+          floor: Color(0xFF8C84A8),
+          floorDark: Color(0xFF665D82),
+          wallBase: Color(0xFF1B1238),
+          wallMain: Color(0xFF4A3C80),
+          wallHi: Color(0xFFB9A6FF),
+          gate: Color(0xFF45E0C8),
+          scenery: Scenery.runes,
+          wallStyle: WallStyle.castle,
+          floorStyle: FloorStyle.flagstone,
+          panelTop: Color(0xEE35295E),
+          panelBottom: Color(0xEE19113A),
+          accent: Color(0xFFA98BFF),
+        ),
     };
 
 /// Level-specific numbers for the select screen.
@@ -245,6 +313,20 @@ String hazardNote(GameConfig c) {
     WorldKind.graveyard =>
       tr('note.graveyard', {'n': k, 's': trapEvery}),
     WorldKind.ocean => tr('note.ocean', {'n': c.jellyCount}),
+    WorldKind.volcano => tr('note.volcano', {
+        'l': c.lavaCount,
+        'g': c.geyserCount,
+        's': c.crustSeconds.toStringAsFixed(1),
+      }),
+    WorldKind.factory => tr('note.factory', {
+        'b': c.beltCount,
+        'p': c.pressCount,
+        'w': c.pendulumCount,
+        't': c.turntableCount,
+      }),
+    WorldKind.candy =>
+        tr('note.candy', {'c': c.gooCount, 'g': c.jellyCount, 'w': c.wormCount}),
+    WorldKind.shifting => tr('note.shifting', {'d': c.doorCount}),
     WorldKind.glass => tr('note.glass', {'l': c.beamInterval.toStringAsFixed(1), 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1

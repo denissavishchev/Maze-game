@@ -2,7 +2,7 @@ import 'dart:math';
 
 /// The material the ball is made of. Each one trades something for something
 /// else; the numbers are multipliers on the standard (wooden) ball.
-enum BallKind { wood, steel, rubber, glass, stone, slime, paper, bubble }
+enum BallKind { wood, steel, rubber, glass, stone, slime, paper, bubble, chameleon }
 
 class BallStats {
   const BallStats({
@@ -17,6 +17,7 @@ class BallStats {
     this.stick = 0,
     this.breaksAt,
     this.floats = false,
+    this.magnetic = 0,
   });
 
   /// How quickly a tilt gets it rolling.
@@ -52,10 +53,32 @@ class BallStats {
 
   /// Floats above the ground: bogs, fog and crumbling floor leave it alone.
   final bool floats;
+
+  /// How strongly electromagnets pull at it (only iron does).
+  final double magnetic;
+
+  /// The same traits in a ball of another size.
+  BallStats withRadius(double r) => BallStats(
+        accel: accel,
+        maxSpeed: maxSpeed,
+        damping: damping,
+        bounce: bounce,
+        radius: r,
+        noise: noise,
+        windResist: windResist,
+        bogResist: bogResist,
+        stick: stick,
+        breaksAt: breaksAt,
+        floats: floats,
+        magnetic: magnetic,
+      );
 }
 
 BallStats statsOf(BallKind kind) => switch (kind) {
       BallKind.wood => const BallStats(),
+      // The chameleon has no traits of its own: the game gives it those of
+      // another ball for ten seconds at a time (see GameController.ball).
+      BallKind.chameleon => const BallStats(),
       BallKind.steel => const BallStats(
           accel: 0.85,
           maxSpeed: 1.15,
@@ -63,6 +86,7 @@ BallStats statsOf(BallKind kind) => switch (kind) {
           bounce: 0.1,
           noise: 1.4,
           windResist: 0.25,
+          magnetic: 1,
         ),
       BallKind.rubber => const BallStats(
           accel: 1.1,

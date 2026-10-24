@@ -53,6 +53,8 @@ class RectMaze implements Maze {
   List<int> buttonCells = const [];
   @override
   List<int> solution = const [];
+  @override
+  List<int> loops = const [];
 
   late final List<List<(int, int)>> _adjacency;
 
@@ -209,6 +211,20 @@ class RectMaze implements Maze {
     return Offset.zero;
   }
 
+  @override
+  List<Seg> edgeSegs(int edge) {
+    final (a, b) = _ends(edge);
+    return [Seg(a, b, -1)];
+  }
+
+  @override
+  Path edgePath(int edge) {
+    final (a, b) = _ends(edge);
+    return Path()
+      ..moveTo(a.dx, a.dy)
+      ..lineTo(b.dx, b.dy);
+  }
+
   /// Collision walls grouped by the rows they touch.
   late final List<List<Seg>> byRow = _buildSegments();
 
@@ -290,20 +306,22 @@ class RectMaze implements Maze {
     required int gates,
     Random? random,
     int? startCol,
+    int loops = 0,
   }) {
     final rnd = random ?? Random();
     RectMaze? best;
     for (var attempt = 0; attempt < 80; attempt++) {
-      final m = _attempt(cols, rows, gates, rnd, startCol: startCol);
+      final m = _attempt(cols, rows, gates, rnd, startCol: startCol, loops: loops);
       if (m == null) continue;
       if (best == null || m.solution.length > best.solution.length) best = m;
       if (m.solution.length >= gates * 3 + rows) break;
     }
-    return best ?? _attempt(cols, rows, gates, rnd, relaxed: true, startCol: startCol)!;
+    return best ??
+        _attempt(cols, rows, gates, rnd, relaxed: true, startCol: startCol, loops: loops)!;
   }
 
   static RectMaze? _attempt(int cols, int rows, int gates, Random rnd,
-      {bool relaxed = false, int? startCol}) {
+      {bool relaxed = false, int? startCol, int loops = 0}) {
     final start = startCol ?? rnd.nextInt(cols);
     final goal = (rows - 1) * cols + rnd.nextInt(cols);
     final m = RectMaze._(cols: cols, rows: rows, start: start, goal: goal);
@@ -349,6 +367,7 @@ class RectMaze implements Maze {
     if (buttons == null) return null;
     m.buttonCells = buttons;
     m.solution = route;
+    if (loops > 0) m.loops = addLoops(m, m.open, m.gateOf, loops, rnd);
     return m;
   }
 }

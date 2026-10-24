@@ -55,6 +55,14 @@ abstract interface class Maze {
   /// Rough centre of gate [index], for effects and hints.
   Offset gateCenter(int index);
 
+  /// Extra passages opened on top of the spanning tree (see [addLoops]); each
+  /// closes a loop, so shutting one never cuts the maze in two.
+  List<int> get loops;
+
+  /// The wall pieces that edge [edge] stands for, and the same as a path.
+  List<Seg> edgeSegs(int edge);
+  Path edgePath(int edge);
+
   /// All permanent walls as one path to stroke.
   Path wallPath();
 
@@ -106,6 +114,42 @@ Map<int, int> distancesFrom(Maze m, Iterable<int> from, bool Function(int) ok) {
     }
   }
   return dist;
+}
+
+/// Opens up to [count] extra passages, turning the maze's tree into a graph
+/// with loops, and returns their edge ids. A loop is only ever made between
+/// cells that are already joined without passing a gate, so no gate can be
+/// walked around, and the loops are kept apart from each other.
+List<int> addLoops(Maze m, List<bool> open, List<int> gateOf, int count, Random rnd) {
+  final comp = List<int>.filled(m.cellCount, -1);
+  var k = 0;
+  for (var c = 0; c < m.cellCount; c++) {
+    if (comp[c] >= 0) continue;
+    for (final x in reachable(m, [c], (e) => open[e] && gateOf[e] < 0)) {
+      comp[x] = k;
+    }
+    k++;
+  }
+  final cands = <(int, int, int)>[];
+  for (var c = 0; c < m.cellCount; c++) {
+    for (final (n, e) in m.neighbours(c)) {
+      if (c < n && !open[e] && comp[c] == comp[n]) cands.add((c, n, e));
+    }
+  }
+  cands.shuffle(rnd);
+  final made = <int>[];
+  final spots = <Offset>[];
+  // A few loops are kept well apart; a lot of them may sit close together.
+  final gap = count > 10 ? 0.9 : 2.2;
+  for (final (a, b, e) in cands) {
+    if (made.length >= count) break;
+    final mid = (m.cellCenter(a) + m.cellCenter(b)) / 2;
+    if (spots.any((s) => (s - mid).distance < gap)) continue;
+    open[e] = true;
+    made.add(e);
+    spots.add(mid);
+  }
+  return made;
 }
 
 /// One gate per slice of the route, so they are spread out. [edges] are the

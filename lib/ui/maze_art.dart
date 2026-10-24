@@ -127,6 +127,9 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
     case FloorStyle.seabed:
       _seabed(c, rnd, Rect.fromCircle(center: Offset.zero, radius: R), t,
           clip: Path()..addOval(Rect.fromCircle(center: Offset.zero, radius: R)));
+    case FloorStyle.basalt:
+      _basalt(c, rnd, Rect.fromCircle(center: Offset.zero, radius: R), t,
+          clip: Path()..addOval(Rect.fromCircle(center: Offset.zero, radius: R)));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rings.
       var ring = 0;
@@ -215,6 +218,59 @@ void _seabed(Canvas c, Random rnd, Rect area, WorldTheme t, {Path? clip}) {
   c.restore();
 }
 
+/// Basalt columns seen from above: a honeycomb of hexagonal tops, some paler
+/// or darker, with thin cracks glowing faintly orange between them.
+void _basalt(Canvas c, Random rnd, Rect area, WorldTheme t, {Path? clip}) {
+  c.save();
+  if (clip != null) c.clipPath(clip);
+  const r = 0.34;
+  final seam = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeJoin = StrokeJoin.round
+    ..strokeWidth = 0.05
+    ..color = t.floorDark.withValues(alpha: 0.85);
+  var col = 0;
+  for (var x = area.left; x < area.right + r; x += r * 1.5, col++) {
+    final lift = col.isOdd ? r * 0.866 : 0.0;
+    for (var y = area.top - r + lift; y < area.bottom + r; y += r * 1.732) {
+      final hex = Path();
+      for (var i = 0; i < 6; i++) {
+        final q = Offset(x + r * cos(i * pi / 3), y + r * sin(i * pi / 3));
+        i == 0 ? hex.moveTo(q.dx, q.dy) : hex.lineTo(q.dx, q.dy);
+      }
+      hex.close();
+      final shade = rnd.nextDouble();
+      if (shade < 0.3) {
+        c.drawPath(hex, Paint()..color = Colors.black.withValues(alpha: 0.1 + 0.1 * rnd.nextDouble()));
+      } else if (shade > 0.78) {
+        c.drawPath(hex, Paint()..color = Colors.white.withValues(alpha: 0.06));
+      }
+      c.drawPath(hex, seam);
+    }
+  }
+  // Cracks with the heat of the lava below showing through.
+  final glow = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..strokeWidth = 0.028
+    ..color = const Color(0xFFFF7A2E).withValues(alpha: 0.4);
+  for (var i = 0; i < area.width * area.height * 0.1; i++) {
+    final p = Offset(area.left + rnd.nextDouble() * area.width, area.top + rnd.nextDouble() * area.height);
+    final a = rnd.nextDouble() * kTwoPi;
+    final q1 = p + polar(0.16, a);
+    final q2 = q1 + polar(0.14, a + (rnd.nextDouble() - 0.5) * 1.6);
+    c.drawPath(
+      Path()
+        ..moveTo(p.dx, p.dy)
+        ..lineTo(q1.dx, q1.dy)
+        ..lineTo(q2.dx, q2.dy),
+      glow,
+    );
+  }
+  c.restore();
+}
+
 // ---- walls -----------------------------------------------------------------
 
 void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
@@ -246,6 +302,10 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
     ..color = _ink.withValues(alpha: 0.45)
     ..strokeWidth = 0.03
     ..strokeCap = StrokeCap.round;
+  final ember = Paint()
+    ..color = const Color(0xFFFF8A3A)
+    ..strokeWidth = 0.035
+    ..strokeCap = StrokeCap.round;
   final torches = <Offset>[];
 
   for (final metric in walls.computeMetrics()) {
@@ -258,6 +318,9 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
       WallStyle.hull => 0.3,
       WallStyle.glass => 0.26,
       WallStyle.coral => 0.2,
+      WallStyle.basalt => 0.24,
+      WallStyle.industrial => 0.28,
+      WallStyle.candy => 0.2,
     };
     var k = 0;
     for (var d = 0.0; d < metric.length; d += step, k++) {
@@ -311,6 +374,43 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
             c.drawLine(tan.position, tip, joint..strokeWidth = 0.05);
             c.drawLine(tip, tip + normal * 0.0 + tan.vector * 0.08, joint);
             c.drawCircle(tip, 0.035, light);
+          }
+        case WallStyle.basalt:
+          // Dark rock split into columns, with embers glowing in the cracks.
+          if (k % 2 == 0) {
+            c.drawLine(tan.position + normal * 0.1, tan.position - normal * 0.1, joint);
+          }
+          if (rnd.nextDouble() < 0.18) {
+            final from = tan.position + normal * side;
+            c.drawLine(from, from + tan.vector * 0.12 + normal * 0.05, ember);
+          }
+        case WallStyle.industrial:
+          // Riveted steel with hazard stripes painted across it.
+          if (k % 3 == 0) {
+            c.drawLine(
+              tan.position + normal * 0.11 + tan.vector * 0.07,
+              tan.position - normal * 0.11 - tan.vector * 0.07,
+              Paint()..color = _ink.withValues(alpha: 0.75)..strokeWidth = 0.075,
+            );
+          } else if (k % 3 == 1) {
+            c.drawCircle(tan.position, 0.03, light);
+            c.drawCircle(tan.position.translate(0.012, 0.016), 0.02, shade);
+          }
+        case WallStyle.candy:
+          // Stripes like a candy cane, and a few sprinkles.
+          if (k % 2 == 0) {
+            c.drawLine(
+              tan.position + normal * 0.12 + tan.vector * 0.05,
+              tan.position - normal * 0.12 - tan.vector * 0.05,
+              light.withAlpha(230)..strokeWidth = 0.06,
+            );
+          }
+          if (rnd.nextDouble() < 0.1) {
+            c.drawCircle(
+              tan.position + normal * side * 0.6,
+              0.028,
+              Paint()..color = const [Color(0xFF4FC3F7), Color(0xFFFFEB3B), Color(0xFF7CE08A)][k % 3],
+            );
           }
         case WallStyle.hull:
           // Panel seams across the wall and a rivet between them.
@@ -449,6 +549,23 @@ void _rock(Canvas c, Offset p, double s, Color body, Color top) {
     Rect.fromCenter(center: p.translate(-s * 0.1, -s * 0.3), width: s * 1.5, height: s * 0.7),
     Paint()..color = top,
   );
+}
+
+/// A toothed wheel with a hub, seen from above.
+void _gear(Canvas c, Offset p, double r, Color body) {
+  final teeth = 8 + (r * 6).round();
+  final path = Path();
+  for (var i = 0; i < teeth * 2; i++) {
+    final a = i * pi / teeth;
+    final rad = i.isEven ? r * 1.15 : r * 0.92;
+    final q = p + polar(rad, a);
+    i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+  }
+  path.close();
+  c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.13..strokeJoin = StrokeJoin.round..color = _ink);
+  c.drawPath(path, Paint()..color = body);
+  c.drawCircle(p, r * 0.55, Paint()..color = Colors.black.withValues(alpha: 0.18));
+  c.drawCircle(p, r * 0.22, Paint()..color = _ink);
 }
 
 void _crystal(Canvas c, Offset p, double s, Color body, Color facet) {
@@ -775,6 +892,242 @@ void _scenery(Canvas c, WorldTheme t, Random rnd, _Spot spot) {
       for (var i = 0; i < 24; i++) {
         _rock(c, spot(0.8, 10), 0.3 + rnd.nextDouble() * 0.4, const Color(0xFF5A5F6E), const Color(0xFF7C8294));
       }
+    case Scenery.lavaField:
+      // Black rock with lakes of lava, smoking cones and drifting embers.
+      for (var i = 0; i < 26; i++) {
+        final p = spot(1.9, 10);
+        c.drawCircle(
+          p,
+          1.9,
+          Paint()
+            ..shader = ui.Gradient.radial(p, 1.9, [
+              const Color(0xFFFF6A1A).withValues(alpha: 0.24),
+              const Color(0xFFFF6A1A).withValues(alpha: 0),
+            ]),
+        );
+      }
+      for (var i = 0; i < 40; i++) {
+        _rock(c, spot(1.9, 10), 0.4 + rnd.nextDouble() * 0.5, const Color(0xFF2E2220), const Color(0xFF4A3A36));
+      }
+      for (var i = 0; i < 24; i++) {
+        final p = spot(1.9, 10);
+        final w = 1.0 + rnd.nextDouble() * 1.8;
+        final lake = Rect.fromCenter(center: p, width: w, height: w * 0.62);
+        c.drawOval(lake.inflate(0.08), Paint()..color = _ink);
+        c.drawOval(
+          lake,
+          Paint()
+            ..shader = ui.Gradient.radial(p, w * 0.5, const [
+              Color(0xFFFFC94A),
+              Color(0xFFFF6A1A),
+              Color(0xFFC72A0C),
+            ], const [0, 0.55, 1]),
+        );
+        c.drawOval(
+          Rect.fromCenter(center: p.translate(-w * 0.1, -w * 0.08), width: w * 0.4, height: w * 0.16),
+          Paint()..color = const Color(0xFFFFF1B0).withValues(alpha: 0.7),
+        );
+      }
+      for (var i = 0; i < 10; i++) {
+        // A cone with a glowing crater and a stream of lava down its side.
+        final p = spot(2.4, 9);
+        final s = 1.1 + rnd.nextDouble() * 0.9;
+        final cone = Path()
+          ..moveTo(p.dx - s * 1.1, p.dy + s * 0.7)
+          ..lineTo(p.dx - s * 0.32, p.dy - s * 0.8)
+          ..lineTo(p.dx + s * 0.32, p.dy - s * 0.8)
+          ..lineTo(p.dx + s * 1.1, p.dy + s * 0.7)
+          ..close();
+        c.drawPath(cone, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.15..strokeJoin = StrokeJoin.round..color = _ink);
+        c.drawPath(cone, Paint()..color = const Color(0xFF3A2A27));
+        c.drawPath(
+          Path()
+            ..moveTo(p.dx - s * 1.1, p.dy + s * 0.7)
+            ..lineTo(p.dx - s * 0.32, p.dy - s * 0.8)
+            ..lineTo(p.dx - s * 0.05, p.dy - s * 0.8)
+            ..lineTo(p.dx - s * 0.4, p.dy + s * 0.7)
+            ..close(),
+          Paint()..color = Colors.white.withValues(alpha: 0.08),
+        );
+        final crater = Rect.fromCenter(center: p.translate(0, -s * 0.8), width: s * 0.8, height: s * 0.28);
+        c.drawOval(crater.inflate(0.05), Paint()..color = _ink);
+        c.drawOval(crater, Paint()..color = const Color(0xFFFF7A2E));
+        c.drawPath(
+          Path()
+            ..moveTo(p.dx + s * 0.05, p.dy - s * 0.72)
+            ..quadraticBezierTo(p.dx + s * 0.25, p.dy - s * 0.1, p.dx + s * 0.12, p.dy + s * 0.2)
+            ..quadraticBezierTo(p.dx + s * 0.35, p.dy + s * 0.45, p.dx + s * 0.3, p.dy + s * 0.7),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeWidth = s * 0.09
+            ..color = const Color(0xFFFF8A3A),
+        );
+        // Smoke from the crater.
+        for (var k = 0; k < 3; k++) {
+          c.drawCircle(
+            p.translate((k - 1) * s * 0.12, -s * (1.1 + k * 0.38)),
+            s * (0.22 + k * 0.1),
+            Paint()..color = const Color(0xFF9A8F8C).withValues(alpha: 0.28 - k * 0.06),
+          );
+        }
+      }
+      for (var i = 0; i < 90; i++) {
+        c.drawCircle(
+          spot(1.0, 11),
+          0.02 + rnd.nextDouble() * 0.04,
+          Paint()..color = const Color(0xFFFFA23A).withValues(alpha: 0.5 + rnd.nextDouble() * 0.5),
+        );
+      }
+    case Scenery.industry:
+      // Pipes, gears, smokestacks and crates on a steel plain.
+      for (var i = 0; i < 40; i++) {
+        final p = spot(1.9, 10);
+        final w = 1.2 + rnd.nextDouble() * 2.2;
+        c.drawRect(Rect.fromCenter(center: p, width: w, height: w * 0.6),
+            Paint()..color = Colors.black.withValues(alpha: 0.12));
+      }
+      for (var i = 0; i < 26; i++) {
+        final p = spot(1.9, 10);
+        final len = 1.4 + rnd.nextDouble() * 2.0;
+        final dir = rnd.nextBool() ? const Offset(1, 0) : const Offset(0, 1);
+        final q = p + dir * len;
+        c.drawLine(p, q, Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.42..color = _ink);
+        c.drawLine(p, q, Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.32..color = const Color(0xFF6E7C8C));
+        c.drawLine(p.translate(-0.05, -0.07), q.translate(-0.05, -0.07),
+            Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.08..color = Colors.white.withValues(alpha: 0.35));
+        for (final f in [0.3, 0.7]) {
+          final j = p + dir * (len * f);
+          c.drawCircle(j, 0.26, Paint()..color = _ink);
+          c.drawCircle(j, 0.2, Paint()..color = const Color(0xFFE0A526));
+        }
+      }
+      for (var i = 0; i < 16; i++) {
+        _gear(c, spot(1.9, 10), 0.5 + rnd.nextDouble() * 0.8, rnd.nextBool() ? const Color(0xFF8D99A8) : const Color(0xFFD0A030));
+      }
+      for (var i = 0; i < 7; i++) {
+        final p = spot(2.2, 9);
+        final r = Rect.fromCenter(center: p, width: 0.9, height: 2.2);
+        c.drawRect(r.inflate(0.07), Paint()..color = _ink);
+        c.drawRect(r, Paint()..color = const Color(0xFF8A4B3A));
+        for (var y = r.top + 0.25; y < r.bottom; y += 0.5) {
+          c.drawRect(Rect.fromLTWH(r.left, y, r.width, 0.18), Paint()..color = const Color(0xFFE8E0D0));
+        }
+        for (var k = 0; k < 3; k++) {
+          c.drawCircle(p.translate((k - 1) * 0.12, -1.4 - k * 0.5), 0.32 + k * 0.14,
+              Paint()..color = const Color(0xFFB8BEC6).withValues(alpha: 0.3 - k * 0.06));
+        }
+      }
+      for (var i = 0; i < 22; i++) {
+        final p = spot(1.9, 10);
+        final w = 0.6 + rnd.nextDouble() * 0.4;
+        final r = Rect.fromCenter(center: p, width: w, height: w);
+        c.drawRect(r.inflate(0.06), Paint()..color = _ink);
+        c.drawRect(r, Paint()..color = const Color(0xFFB0773A));
+        final x = Paint()..color = const Color(0xFF6E4A22)..strokeWidth = 0.05;
+        c.drawLine(r.topLeft, r.bottomRight, x);
+        c.drawLine(r.topRight, r.bottomLeft, x);
+        c.drawRect(r.deflate(0.04), Paint()..style = PaintingStyle.stroke..strokeWidth = 0.05..color = const Color(0xFF6E4A22));
+      }
+    case Scenery.sweets:
+      // Lollipops, gumdrops, candy canes and a drizzle of sprinkles.
+      const swirls = [
+        (Color(0xFFFF4F9A), Color(0xFFFFFFFF)),
+        (Color(0xFF4FC3F7), Color(0xFFFFFFFF)),
+        (Color(0xFFFFB300), Color(0xFFFFF3C0)),
+        (Color(0xFF7CE08A), Color(0xFFFFFFFF)),
+      ];
+      for (var i = 0; i < 70; i++) {
+        final p = spot(1.9, 10);
+        c.drawCircle(p, 0.05 + rnd.nextDouble() * 0.04,
+            Paint()..color = swirls[rnd.nextInt(swirls.length)].$1.withValues(alpha: 0.7));
+      }
+      for (var i = 0; i < 32; i++) {
+        final (a, b) = swirls[rnd.nextInt(swirls.length)];
+        final p = spot(1.9, 10);
+        final s = 0.5 + rnd.nextDouble() * 0.5;
+        c.drawCircle(p.translate(s * 0.3, s * 0.5), s * 0.9, Paint()..color = Colors.black.withValues(alpha: 0.1));
+        final dome = Path()
+          ..moveTo(p.dx - s, p.dy + s * 0.5)
+          ..quadraticBezierTo(p.dx - s, p.dy - s * 1.1, p.dx, p.dy - s * 1.1)
+          ..quadraticBezierTo(p.dx + s, p.dy - s * 1.1, p.dx + s, p.dy + s * 0.5)
+          ..close();
+        c.drawPath(dome, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.13..strokeJoin = StrokeJoin.round..color = _ink);
+        c.drawPath(dome, Paint()..color = a);
+        c.drawCircle(p.translate(-s * 0.35, -s * 0.45), s * 0.22, Paint()..color = b.withValues(alpha: 0.7));
+        for (var k = 0; k < 5; k++) {
+          c.drawCircle(p.translate((k - 2) * s * 0.34, s * 0.25), 0.03, Paint()..color = b);
+        }
+      }
+      for (var i = 0; i < 26; i++) {
+        final (a, b) = swirls[rnd.nextInt(swirls.length)];
+        final p = spot(1.9, 10);
+        final s = 0.45 + rnd.nextDouble() * 0.35;
+        c.drawLine(p, p.translate(0, s * 2.4),
+            Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.16..color = _ink);
+        c.drawLine(p, p.translate(0, s * 2.4),
+            Paint()..strokeCap = StrokeCap.round..strokeWidth = 0.08..color = const Color(0xFFFFF3E0));
+        c.drawCircle(p, s + 0.07, Paint()..color = _ink);
+        c.drawCircle(p, s, Paint()..color = a);
+        final swirl = Path()..moveTo(p.dx, p.dy);
+        for (var k = 1; k <= 24; k++) {
+          final ang = k * 0.5;
+          final rad = s * 0.9 * k / 24;
+          swirl.lineTo(p.dx + cos(ang) * rad, p.dy + sin(ang) * rad);
+        }
+        c.drawPath(swirl, Paint()..style = PaintingStyle.stroke..strokeWidth = s * 0.22..strokeCap = StrokeCap.round..color = b);
+      }
+      for (var i = 0; i < 18; i++) {
+        final p = spot(1.9, 10);
+        final h = 0.9 + rnd.nextDouble() * 0.5;
+        final cane = Path()
+          ..moveTo(p.dx, p.dy + h)
+          ..lineTo(p.dx, p.dy)
+          ..arcToPoint(Offset(p.dx + 0.5, p.dy), radius: const Radius.circular(0.25), clockwise: true);
+        c.drawPath(cane, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.3..strokeCap = StrokeCap.round..color = _ink);
+        c.drawPath(cane, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.2..strokeCap = StrokeCap.round..color = Colors.white);
+        for (var d = 0.0; d < h; d += 0.26) {
+          c.drawLine(p.translate(-0.09, h - d), p.translate(0.09, h - d - 0.13),
+              Paint()..strokeWidth = 0.07..color = const Color(0xFFE53935));
+        }
+      }
+    case Scenery.runes:
+      // Floating stones, glowing rune circles and sparks in a violet void.
+      for (var i = 0; i < 90; i++) {
+        c.drawCircle(
+          spot(0.6, 12),
+          0.02 + rnd.nextDouble() * 0.04,
+          Paint()..color = const Color(0xFFD9CCFF).withValues(alpha: 0.3 + rnd.nextDouble() * 0.6),
+        );
+      }
+      for (var i = 0; i < 18; i++) {
+        final p = spot(1.9, 10);
+        final r = 0.6 + rnd.nextDouble() * 0.9;
+        final glow = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 0.05
+          ..color = const Color(0xFFB9A6FF).withValues(alpha: 0.6);
+        c.drawCircle(p, r * 1.5, Paint()..shader = ui.Gradient.radial(p, r * 1.5, [
+          const Color(0xFF8E6BFF).withValues(alpha: 0.25),
+          const Color(0xFF8E6BFF).withValues(alpha: 0),
+        ]));
+        c.drawCircle(p, r, glow);
+        c.drawCircle(p, r * 0.7, glow);
+        for (var k = 0; k < 6; k++) {
+          final a = k * pi / 3 + r;
+          c.drawLine(p + polar(r * 0.7, a), p + polar(r, a), glow);
+        }
+        final tri = Path();
+        for (var k = 0; k < 3; k++) {
+          final q = p + polar(r * 0.5, k * 2 * pi / 3 - pi / 2);
+          k == 0 ? tri.moveTo(q.dx, q.dy) : tri.lineTo(q.dx, q.dy);
+        }
+        c.drawPath(tri..close(), glow);
+      }
+      for (var i = 0; i < 34; i++) {
+        _rock(c, spot(1.9, 10), 0.4 + rnd.nextDouble() * 0.6, const Color(0xFF3A2E66), const Color(0xFF6A58B0));
+      }
     case Scenery.houses:
       for (var i = 0; i < 60; i++) {
         final p = spot(1.9, 10);
@@ -923,6 +1276,8 @@ void _rectFloor(Canvas c, Rect bounds, WorldTheme t, Random rnd) {
       c.restore();
     case FloorStyle.seabed:
       _seabed(c, rnd, bounds, t, clip: Path()..addRect(bounds));
+    case FloorStyle.basalt:
+      _basalt(c, rnd, bounds, t, clip: Path()..addRect(bounds));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rows.
       var row = 0;
