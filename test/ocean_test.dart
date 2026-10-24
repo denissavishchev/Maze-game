@@ -13,11 +13,11 @@ GameController ocean({int level = 3, int seed = 3, BallKind ball = BallKind.wood
     GameController(GameConfig(WorldKind.ocean, level, ball: ball), seed: seed);
 
 void main() {
-  test('the ocean has whirlpools well away from the start and nothing else', () {
+  test('the ocean has jellyfish well away from the start and nothing else', () {
     final g = ocean();
-    expect(g.whirls.length, g.config.whirlCount);
-    for (final w in g.whirls) {
-      expect((w.pos - g.pos).distance, greaterThan(3.5));
+    expect(g.jellies.length, g.config.jellyCount);
+    for (final j in g.jellies) {
+      expect((j.pos - g.pos).distance, greaterThan(2.9));
     }
     expect(g.creatures, isEmpty);
     expect(g.mud, isEmpty);
@@ -25,47 +25,69 @@ void main() {
     expect(g.config.windEnabled, isTrue, reason: 'currents on every size');
   });
 
-  test('whirlpools drift along the corridors', () {
+  test('jellyfish patrol a fixed stretch back and forth, never chasing', () {
     final g = ocean(level: 4, seed: 6);
     g.started = true;
-    final start = [for (final w in g.whirls) w.pos];
-    for (var i = 0; i < 60 * 6; i++) {
-      g.vel = const Offset(0.0, 0.0);
+    final seen = <int, List<Offset>>{};
+    for (var i = 0; i < 60 * 40; i++) {
+      g.vel = Offset.zero;
       g.pos = g.maze.cellCenter(g.maze.start);
+      g.caughtResetForTest();
       g.update(1 / 60, Offset.zero);
+      for (var k = 0; k < g.jellies.length; k++) {
+        seen.putIfAbsent(k, () => []).add(g.jellies[k].pos);
+      }
     }
-    for (var i = 0; i < g.whirls.length; i++) {
-      expect((g.whirls[i].pos - start[i]).distance, greaterThan(0.5));
+    for (final j in g.jellies) {
+      expect(j.path.length, greaterThan(1));
+      final walked = seen[g.jellies.indexOf(j)]!;
+      final far = walked.map((p) => (p - j.home).distance).reduce((a, b) => a > b ? a : b);
+      expect(far, greaterThan(1.5), reason: 'it swims away from its home');
+      // Always on its own patrol: close to some point of the route.
+      for (final p in walked) {
+        final near = j.path.map((q) => (q - p).distance).reduce((a, b) => a < b ? a : b);
+        expect(near, lessThan(1.5));
+      }
     }
   });
 
-  test('a whirlpool pulls the ball in, and its eye swallows it', () {
+  test('a jellyfish sends the ball back to the start, only when it touches', () {
     final g = ocean(level: 3, seed: 4);
     g.started = true;
-    final w = g.whirls.first;
-    w.route.clear();
-    g.pos = w.pos + const Offset(0.9, 0);
+    final j = g.jellies.first;
+    g.update(1 / 60, Offset.zero); // plans the patrol
+    g.pos = j.pos + const Offset(2.0, 0);
     g.vel = Offset.zero;
-    final d0 = (g.pos - w.pos).distance;
-    g.update(1 / 30, Offset.zero);
-    expect((g.pos - w.pos).distance, lessThan(d0), reason: 'pulled in');
-    g.pos = w.pos + const Offset(0.1, 0);
     g.update(1 / 60, Offset.zero);
-    expect(g.lostReason, 'lose.whirl');
+    expect(g.notice, isNot('notice.jelly'));
+    final start = g.maze.cellCenter(g.maze.start);
+    g.pos = j.pos + const Offset(0.1, 0);
+    g.update(1 / 60, Offset.zero);
+    if ((g.pos - start).distance > 0.01) {
+      // A wall between them keeps the sting out; stand in line of sight.
+      g.pos = j.pos;
+      g.update(1 / 60, Offset.zero);
+    }
+    expect(g.notice, 'notice.jelly');
+    expect((g.pos - start).distance, lessThan(0.01));
+    expect(g.status, GameStatus.playing);
   });
 
-  test('heavy balls resist a whirlpool better than paper', () {
-    double pulled(BallKind b) {
-      final g = ocean(level: 3, seed: 4, ball: b);
-      g.started = true;
-      final w = g.whirls.first..route.clear();
-      g.pos = w.pos + const Offset(1.0, 0);
+  test('a jellyfish glows brighter just before it turns round', () {
+    final g = ocean(level: 3, seed: 4);
+    g.started = true;
+    var calm = 1.0, bright = 0.0;
+    for (var i = 0; i < 60 * 40; i++) {
+      g.pos = g.maze.cellCenter(g.maze.start);
       g.vel = Offset.zero;
-      g.update(1 / 30, Offset.zero);
-      return g.vel.distance;
+      g.caughtResetForTest();
+      g.update(1 / 60, Offset.zero);
+      final j = g.jellies.first;
+      if (j.glow < calm) calm = j.glow;
+      if (j.glow > bright) bright = j.glow;
     }
-
-    expect(pulled(BallKind.stone), lessThan(pulled(BallKind.paper)));
+    expect(calm, lessThan(0.2));
+    expect(bright, greaterThan(0.9));
   });
 
   test('currents come with a warning and carry the ball', () {
@@ -73,7 +95,7 @@ void main() {
     g.started = true;
     var guard = 0;
     while (g.windWarnLeft <= 0 && guard++ < 2000) {
-      g.whirls.clear();
+      g.jellies.clear();
       g.update(1 / 60, Offset.zero);
     }
     expect(g.windWarnLeft, greaterThan(0));
@@ -86,19 +108,21 @@ void main() {
     expect(g.vel.distance, greaterThan(from));
   });
 
-  test('the anchor freezes whirlpools and currents', () {
+  test('the anchor freezes the jellyfish and the currents', () {
     final g = ocean(level: 3, seed: 4);
     g.started = true;
+    g.update(1 / 60, Offset.zero);
     g.bonusCharges = 1;
     g.useBonus();
-    final w = g.whirls.first;
-    final at = w.pos;
-    g.pos = w.pos + const Offset(0.1, 0);
+    final j = g.jellies.first;
+    final at = j.pos;
+    g.pos = j.pos;
     for (var i = 0; i < 120; i++) {
       g.update(1 / 60, Offset.zero);
     }
     expect(g.status, GameStatus.playing);
-    expect(w.pos, at);
+    expect(g.notice, isNot('notice.jelly'));
+    expect(j.pos, at);
   });
 
   test('the world has a theme and texts in every language', () {
@@ -108,7 +132,7 @@ void main() {
       expect(t.name, isNot(startsWith('world.')));
       expect(t.blurb, isNot(startsWith('world.')));
       expect(hazardNote(const GameConfig(WorldKind.ocean, 3)), isNot(startsWith('note.')));
-      for (final k in ['bonus.ocean', 'current.now', 'current.coming', 'lose.whirl', 'notice.current']) {
+      for (final k in ['bonus.ocean', 'current.now', 'current.coming', 'notice.jelly', 'notice.current']) {
         expect(tr(k), isNot(k), reason: '$k in ${lang.name}');
       }
     }

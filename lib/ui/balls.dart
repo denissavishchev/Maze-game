@@ -161,6 +161,18 @@ _Marks _marksOf(BallKind kind) => _marksCache.putIfAbsent(kind, () {
                 ], const Color(0xFF8A8576).withValues(alpha: 0.55), 0.05);
               }(),
           ], const []);
+        case BallKind.bubble:
+          // Drifting colour bands of the soap film, and a faint ring.
+          return _Marks([
+            _Line(_ring(_unit(0.3, 1, 0.1), 0.8),
+                const Color(0xFFFF9AD5).withValues(alpha: 0.5), 0.18),
+            _Line(_ring(_unit(0.3, 1, 0.1), 1.35),
+                const Color(0xFF8FF0FF).withValues(alpha: 0.5), 0.16),
+            _Line(_ring(_unit(0.3, 1, 0.1), 1.9),
+                const Color(0xFFFFF29A).withValues(alpha: 0.45), 0.14),
+            _Line(_ring(_unit(0.3, 1, 0.1), 2.45),
+                const Color(0xFFC3A8FF).withValues(alpha: 0.5), 0.16),
+          ], const []);
         case BallKind.stone:
           final crack = [
             for (var i = 0; i <= 14; i++)
@@ -222,6 +234,18 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
     case BallKind.paper:
       c.drawCircle(p, r,
           sphere(const [Color(0xFFFFFFFF), Color(0xFFF1EDDF), Color(0xFFB5AF9B)], const [0, 0.55, 1]));
+    case BallKind.bubble:
+      // Nearly clear, a little pearly at the rim.
+      c.drawCircle(p, r, Paint()..color = const Color(0xFFBFEFFF).withValues(alpha: 0.12));
+      c.drawCircle(
+          p,
+          r,
+          Paint()
+            ..shader = ui.Gradient.radial(light, r * 1.7, [
+              Colors.white.withValues(alpha: 0.35),
+              const Color(0xFFBFE9FF).withValues(alpha: 0.12),
+              const Color(0xFFE2B8FF).withValues(alpha: 0.55),
+            ], const [0, 0.6, 1]));
     case BallKind.slime:
       // Glossy green gel: see-through at the middle, deeper at the edge.
       c.drawCircle(p, r, Paint()..color = const Color(0xFF3DDC5A).withValues(alpha: 0.5));
@@ -272,7 +296,7 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
     );
   }
 
-  if (kind == BallKind.glass || kind == BallKind.slime) {
+  if (kind == BallKind.glass || kind == BallKind.slime || kind == BallKind.bubble) {
     c.drawCircle(
       p,
       r,
@@ -286,7 +310,7 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
   c.drawCircle(
     light,
     r * 0.18,
-    Paint()..color = Colors.white.withValues(alpha: kind == BallKind.stone ? 0.35 : kind == BallKind.paper ? 0.55 : 0.8),
+    Paint()..color = Colors.white.withValues(alpha: kind == BallKind.stone ? 0.35 : kind == BallKind.paper ? 0.55 : kind == BallKind.bubble ? 0.95 : 0.8),
   );
 }
 

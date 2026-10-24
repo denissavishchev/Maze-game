@@ -145,6 +145,8 @@ void main() {
   test('an autopilot can walk the whole maze, out through the exit', () {
     final g = GameController(GameController.endlessConfig(0, BallKind.wood),
         endless: true, hazardsEnabled: false, seed: 9);
+    // The ball is random in endless mode; the autopilot is tuned for wood.
+    g.config = GameController.endlessConfig(0, BallKind.wood, world: g.config.world);
     final first = g.maze;
     var guard = 0;
     while (g.maze == first && guard++ < 20000) {

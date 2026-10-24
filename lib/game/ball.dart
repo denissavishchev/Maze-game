@@ -2,7 +2,7 @@ import 'dart:math';
 
 /// The material the ball is made of. Each one trades something for something
 /// else; the numbers are multipliers on the standard (wooden) ball.
-enum BallKind { wood, steel, rubber, glass, stone, slime, paper }
+enum BallKind { wood, steel, rubber, glass, stone, slime, paper, bubble }
 
 class BallStats {
   const BallStats({
@@ -16,6 +16,7 @@ class BallStats {
     this.bogResist = 0,
     this.stick = 0,
     this.breaksAt,
+    this.floats = false,
   });
 
   /// How quickly a tilt gets it rolling.
@@ -48,6 +49,9 @@ class BallStats {
 
   /// A hit at least this hard destroys it (null: unbreakable).
   final double? breaksAt;
+
+  /// Floats above the ground: bogs, fog and crumbling floor leave it alone.
+  final bool floats;
 }
 
 BallStats statsOf(BallKind kind) => switch (kind) {
@@ -104,6 +108,20 @@ BallStats statsOf(BallKind kind) => switch (kind) {
           noise: 0.3,
           windResist: -0.6,
           bogResist: -0.6,
+        ),
+      // A soap bubble: a thin skin of air, big and drifting. Nothing on the
+      // floor touches it, but a gust carries it far and any real knock pops it.
+      BallKind.bubble => const BallStats(
+          accel: 1.2,
+          maxSpeed: 0.8,
+          damping: 0.7,
+          bounce: 0.45,
+          radius: 1.3,
+          noise: 0.12,
+          windResist: -0.7,
+          bogResist: 1,
+          breaksAt: 3.8,
+          floats: true,
         ),
     };
 

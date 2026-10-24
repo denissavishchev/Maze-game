@@ -110,14 +110,25 @@ class SecurityCamera {
   double alert = 0;
 }
 
-/// Ocean: a whirlpool drifting along the corridors. It pulls the ball in and
-/// swirls it round; right in its eye the ball is lost.
-class Whirl {
-  Whirl(this.home) : pos = home;
+/// Ocean: a jellyfish drifting slowly back and forth along a fixed stretch of
+/// corridor. It does not chase; it only stings what it meets, and glows
+/// brighter just before it turns.
+class Jellyfish {
+  Jellyfish(this.home) : pos = home;
 
   final Offset home;
   Offset pos;
-  final List<Offset> route = [];
+
+  /// The stretch it patrols, as points; [at] is the one it is heading for.
+  final List<Offset> path = [];
+  int at = 0;
+  int dir = 1;
+
+  /// Seconds left of the pause at either end of the patrol.
+  double pause = 0;
+
+  /// 0 calm, up to 1 just before it turns.
+  double glow = 0;
 }
 
 /// Glass: a spot of floor that crumbles while the ball stands on it. [level]
@@ -321,6 +332,20 @@ class GameController extends ChangeNotifier {
   double transition = 1;
   bool get scrolling => transition < 1;
 
+  /// A ball that can break: how close its hardest recent knock came to
+  /// breaking it, 0 to 1. Held for a moment, then it drains away.
+  double strain = 0;
+  double _strainHold = 0;
+
+  void _trackStrain(double dt, double knock) {
+    if (knock > strain) {
+      strain = min(1.0, knock);
+      _strainHold = 2.5;
+    } else if ((_strainHold -= dt) <= 0) {
+      strain = max(0, strain - dt * 0.25);
+    }
+  }
+
   /// The level being played; in endless mode it changes with every stage.
   GameConfig config;
 
@@ -363,11 +388,10 @@ class GameController extends ChangeNotifier {
   List<MudPatch> fog = [];
   List<Burst> bursts = [];
 
-  /// Ocean: whirlpools wandering the maze.
-  List<Whirl> whirls = [];
-  static const double whirlReach = 1.3;
-  static const double whirlEye = 0.28;
-  static const double whirlPull = 9;
+  /// Ocean: jellyfish patrolling the corridors.
+  List<Jellyfish> jellies = [];
+  static const double jellyReach = 0.62;
+  static const double jellyPause = 0.7;
 
   /// Glass: crumbling floor and the laser beams.
   List<Crumble> cracks = [];
@@ -522,8 +546,8 @@ class GameController extends ChangeNotifier {
     airlocks = [];
     cameras = [];
     if (config.world == WorldKind.space) _placeSpaceHazards();
-    whirls = [];
-    if (config.world == WorldKind.ocean) _placeWhirls();
+    jellies = [];
+    if (config.world == WorldKind.ocean) _placeJellies();
     restart();
   }
 
@@ -582,16 +606,17 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Ocean: whirlpools start in cells well away from the start.
-  void _placeWhirls() {
+  /// Ocean: jellyfish start in cells well away from the start; their patrol
+  /// is worked out on the first step, when the gates are known.
+  void _placeJellies() {
     final special = {maze.start, maze.goal, ...maze.buttonCells};
     final start = maze.cellCenter(maze.start);
     final cells = [
       for (var c = 1; c < maze.cellCount; c++)
-        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 4) c,
+        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 3) c,
     ]..shuffle(_rnd);
-    for (final c in cells.take(config.whirlCount)) {
-      whirls.add(Whirl(maze.cellCenter(c)));
+    for (final c in cells.take(config.jellyCount)) {
+      jellies.add(Jellyfish(maze.cellCenter(c)));
     }
   }
 
@@ -622,6 +647,8 @@ class GameController extends ChangeNotifier {
     noiseLevel = 0;
     _impactNoise = 0;
     stillTime = 0;
+    strain = 0;
+    _strainHold = 0;
     sink = 0;
     windDir = Offset.zero;
     windWarnLeft = 0;
@@ -630,9 +657,11 @@ class GameController extends ChangeNotifier {
     _spaceClock = 0;
     cracks = [];
     beams = [];
-    for (final w in whirls) {
-      w.pos = w.home;
-      w.route.clear();
+    for (final j in jellies) {
+      j.pos = j.home;
+      j.path.clear();
+      j.pause = 0;
+      j.glow = 0;
     }
     _beamTimer = config.beamInterval;
     _beamNoticed = false;
@@ -708,8 +737,9 @@ class GameController extends ChangeNotifier {
     _roll(pos - before);
     _impactSound(dt);
     final breaksAt = ball.breaksAt;
+    if (breaksAt != null) _trackStrain(dt, _impact / breaksAt);
     if (breaksAt != null && _impact >= breaksAt && status == GameStatus.playing) {
-      _lose('lose.glass');
+      _lose(config.ball == BallKind.bubble ? 'lose.bubble' : 'lose.glass');
     }
     _explore();
     _updateNoise(dt);
@@ -839,6 +869,7 @@ class GameController extends ChangeNotifier {
         BallKind.stone => Sound.impactStone,
         BallKind.slime => Sound.impactSlime,
         BallKind.paper => Sound.impactPaper,
+        BallKind.bubble => Sound.impactBubble,
       },
       volume: 0.15 + 0.85 * strength,
     );
@@ -878,6 +909,7 @@ class GameController extends ChangeNotifier {
   }
 
   MudPatch? _patchAt() {
+    if (ball.floats) return null;
     for (final m in mud) {
       if ((m.pos - pos).distance < m.radius + 0.1) return m;
     }
@@ -1045,7 +1077,7 @@ class GameController extends ChangeNotifier {
     }
 
     // Cold fog drags at the ball, though it never stops it.
-    final cold = fog.any((f) => (f.pos - pos).distance < f.radius);
+    final cold = !ball.floats && fog.any((f) => (f.pos - pos).distance < f.radius);
     vel *= exp(-(muddy ? 7.0 : cold ? 4.2 : 1.7 * ball.damping) * dt);
     final cap = muddy
         ? 1.8
@@ -1429,7 +1461,7 @@ class GameController extends ChangeNotifier {
       case WorldKind.glass:
         _updateGlass(dt);
       case WorldKind.ocean:
-        _updateWhirls(dt);
+        _updateJellies(dt);
       case WorldKind.graveyard:
         for (final g in creatures) {
           if (g.lockLeft > 0) {
@@ -1524,39 +1556,84 @@ class GameController extends ChangeNotifier {
 
   // ---- glass ------------------------------------------------------------
 
-  void _updateWhirls(double dt) {
+  void _updateJellies(double dt) {
     // The anchor holds everything still.
     if (bonusLeft > 0) return;
-    for (final w in whirls) {
-      if (w.route.isEmpty) {
-        final to = _rnd.nextInt(maze.cellCount);
-        final path = maze.path(maze.cellAt(w.pos), to, gateOpen);
-        if (path != null && path.length > 1) {
-          w.route.addAll(maze.routePoints(path).skip(1));
-        }
-      }
-      if (w.route.isNotEmpty) {
-        final d = w.route.first - w.pos;
-        final step = config.whirlSpeed * dt;
-        if (d.distance <= step) {
-          w.pos = w.route.removeAt(0);
-        } else {
-          w.pos += d / d.distance * step;
-        }
-      }
-      final to = w.pos - pos;
-      final dist = to.distance;
-      if (dist >= whirlReach) continue;
-      if (dist < whirlEye) {
-        _lose('lose.whirl');
+    for (final j in jellies) {
+      if (j.path.isEmpty) _planPatrol(j);
+      if (j.path.length > 1) _swim(j, dt);
+      if (_invulnerable > 0 || status != GameStatus.playing) continue;
+      if ((j.pos - pos).distance < jellyReach && _lineClear(j.pos, pos)) {
+        caughtByJelly();
         return;
       }
-      final k = 1 - dist / whirlReach;
-      final dir = to / dist;
-      final swirl = Offset(-dir.dy, dir.dx);
-      final heavy = 1 - ball.windResist * 0.8;
-      vel += (dir * whirlPull + swirl * 3) * (k * heavy * dt);
     }
+  }
+
+  /// A patrol of 5 to 9 cells from where the jellyfish starts; it swims there
+  /// and back again for good.
+  void _planPatrol(Jellyfish j) {
+    final from = maze.cellAt(j.home);
+    final targets = [for (var c = 0; c < maze.cellCount; c++) c]..shuffle(_rnd);
+    List<int>? best;
+    for (final c in targets) {
+      final p = maze.path(from, c, gateOpen);
+      if (p == null) continue;
+      if (p.length >= 5 && p.length <= 9) {
+        best = p;
+        break;
+      }
+      if (best == null || p.length > best.length) best = p.length <= 9 ? p : best;
+    }
+    if (best == null || best.length < 2) {
+      j.path
+        ..clear()
+        ..add(j.home);
+      return;
+    }
+    j.path
+      ..clear()
+      ..addAll(maze.routePoints(best));
+    j.at = 1;
+    j.dir = 1;
+  }
+
+  void _swim(Jellyfish j, double dt) {
+    if (j.pause > 0) {
+      j.pause -= dt;
+      j.glow = 1;
+      return;
+    }
+    final goal = j.path[j.at];
+    final d = goal - j.pos;
+    final step = config.jellySpeed * dt;
+    if (d.distance <= step) {
+      j.pos = goal;
+      final next = j.at + j.dir;
+      if (next < 0 || next >= j.path.length) {
+        j.dir = -j.dir;
+        j.pause = jellyPause;
+        j.at += j.dir;
+      } else {
+        j.at = next;
+      }
+    } else {
+      j.pos += d / d.distance * step;
+    }
+    // Brighter as the end of the patrol comes near.
+    final last = j.dir > 0 ? j.path.last : j.path.first;
+    j.glow = (1 - (last - j.pos).distance / 1.2).clamp(0.0, 1.0);
+  }
+
+  /// A jellyfish stung the ball: back to the start, gates stay open.
+  void caughtByJelly() {
+    bursts.add(Burst(pos, 1));
+    pos = maze.cellCenter(maze.start);
+    vel = Offset.zero;
+    _invulnerable = 2.0;
+    notice = 'notice.jelly';
+    noticeArgs = const {};
+    noticeLeft = 2.5;
   }
 
   void _updateGlass(double dt) {
@@ -1568,7 +1645,7 @@ class GameController extends ChangeNotifier {
   /// The floor gives way under a ball that dawdles: four stages of cracking
   /// and then it falls through. Cracks mend slowly once the ball moves on.
   void _crumble(double dt, bool shielded) {
-    final slow = !shielded && vel.distance < crumbleSpeed;
+    final slow = !shielded && !ball.floats && vel.distance < crumbleSpeed;
     Crumble? under;
     for (final k in cracks) {
       if ((k.pos - pos).distance < crumbleRadius) {

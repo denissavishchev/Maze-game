@@ -147,8 +147,8 @@ class GamePainter extends CustomPainter {
     for (final k in game.cracks) {
       _crack(canvas, k, t);
     }
-    for (final w in game.whirls) {
-      _whirl(canvas, w, t);
+    for (final j in game.jellies) {
+      _jelly(canvas, j, t);
     }
     for (final l in game.lasers) {
       _laser(canvas, l, t);
@@ -600,7 +600,7 @@ class GamePainter extends CustomPainter {
         c.drawLine(p.translate(0, -0.03), p.translate(0, 0.09), line);
         c.drawLine(p.translate(-0.05, 0.02), p.translate(0.05, 0.02), line);
       case WorldKind.ocean:
-        // An anchor: currents and whirlpools hold still.
+        // An anchor: currents and jellyfish hold still.
         c.drawCircle(p.translate(0, -0.13), 0.04, line);
         c.drawLine(p.translate(0, -0.09), p.translate(0, 0.14), line);
         c.drawLine(p.translate(-0.07, -0.03), p.translate(0.07, -0.03), line);
@@ -867,45 +867,64 @@ class GamePainter extends CustomPainter {
         Paint()..color = (blink || k > 0 ? const Color(0xFFFF3B3B) : const Color(0xFF5A1E1E)));
   }
 
-  /// A whirlpool: spiral arms turning round a dark eye, ringed by foam.
-  void _whirl(Canvas c, Whirl w, double t) {
-    const reach = GameController.whirlReach;
+  /// A jellyfish: a soft glowing bell with trailing tentacles, inside a
+  /// ring that shows how far its sting reaches. It glows brighter just before
+  /// it turns round.
+  void _jelly(Canvas c, Jellyfish j, double t) {
+    const reach = GameController.jellyReach;
+    final glow = 0.45 + 0.55 * j.glow;
+    final p = j.pos.translate(0, sin(t * 2 + j.home.dx) * 0.03);
+    // Danger zone.
     c.drawCircle(
-      w.pos,
+      p,
       reach,
       Paint()
-        ..shader = ui.Gradient.radial(w.pos, reach, [
-          const Color(0xFF031A33).withValues(alpha: 0.55),
-          const Color(0xFF3FD0E0).withValues(alpha: 0.12),
-          const Color(0xFF3FD0E0).withValues(alpha: 0),
-        ], const [0, 0.55, 1]),
+        ..shader = ui.Gradient.radial(p, reach, [
+          const Color(0xFFFF8AE8).withValues(alpha: 0.12 + 0.22 * glow),
+          const Color(0xFFFF8AE8).withValues(alpha: 0),
+        ], const [0.5, 1]),
     );
-    for (var arm = 0; arm < 3; arm++) {
-      final path = Path();
-      for (var i = 0; i <= 24; i++) {
-        final k = i / 24;
-        final a = arm * 2 * pi / 3 - t * 2.4 + k * 4.2;
-        final q = w.pos + polar(0.16 + k * (reach - 0.2), a);
-        i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
-      }
-      c.drawPath(
-        path,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = 0.07
-          ..color = Colors.white.withValues(alpha: 0.55),
-      );
-    }
-    c.drawCircle(w.pos, GameController.whirlEye, Paint()..color = const Color(0xFF021226));
     c.drawCircle(
-      w.pos,
-      GameController.whirlEye,
+      p,
+      reach,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.04
-        ..color = Colors.white.withValues(alpha: 0.7),
+        ..strokeWidth = 0.03
+        ..color = const Color(0xFFFFB3F0).withValues(alpha: 0.25 + 0.4 * glow),
     );
+    // Tentacles trailing behind and waving.
+    final tent = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 0.035
+      ..color = const Color(0xFFFFC9F4).withValues(alpha: 0.5 + 0.4 * glow);
+    for (var i = -2; i <= 2; i++) {
+      final x = p.dx + i * 0.07;
+      final sway = sin(t * 3 + i) * 0.05;
+      c.drawPath(
+        Path()
+          ..moveTo(x, p.dy + 0.05)
+          ..quadraticBezierTo(x + sway, p.dy + 0.2, x - sway, p.dy + 0.34),
+        tent,
+      );
+    }
+    // The bell.
+    final bell = Path()
+      ..moveTo(p.dx - 0.18, p.dy + 0.05)
+      ..quadraticBezierTo(p.dx - 0.18, p.dy - 0.22, p.dx, p.dy - 0.22)
+      ..quadraticBezierTo(p.dx + 0.18, p.dy - 0.22, p.dx + 0.18, p.dy + 0.05)
+      ..quadraticBezierTo(p.dx, p.dy + 0.0, p.dx - 0.18, p.dy + 0.05)
+      ..close();
+    c.drawPath(bell, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.05..strokeJoin = StrokeJoin.round..color = Palette.ink);
+    c.drawPath(
+      bell,
+      Paint()
+        ..shader = ui.Gradient.radial(p.translate(-0.04, -0.1), 0.3, [
+          Color.lerp(const Color(0xFFFFE6FA), Colors.white, j.glow)!,
+          Color.lerp(const Color(0xFFE68AD8), const Color(0xFFFF6FD8), j.glow)!,
+        ]),
+    );
+    c.drawCircle(p.translate(-0.06, -0.12), 0.03, Paint()..color = Colors.white.withValues(alpha: 0.9));
   }
 
   /// Cracking floor: hairlines at first, then wider cracks, then missing

@@ -120,7 +120,7 @@ class _GameScreenState extends State<GameScreen>
                     height: _stripHeight,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Align(child: _worldBadge() ?? const SizedBox.shrink()),
+                      child: Align(child: _indicators() ?? const SizedBox.shrink()),
                     ),
                   ),
                 Expanded(
@@ -161,12 +161,12 @@ class _GameScreenState extends State<GameScreen>
                             bottom: 215,
                             child: _Hint(haveSensor: _haveSensor),
                           ),
-                        if (!game.endless && _worldBadge() != null)
+                        if (!game.endless && _indicators() != null)
                           Positioned(
                             left: 12,
                             right: 12,
                             top: 8,
-                            child: _worldBadge()!,
+                            child: _indicators()!,
                           ),
                         if (game.noticeLeft > 0)
                           Positioned(
@@ -190,6 +190,23 @@ class _GameScreenState extends State<GameScreen>
   }
 
   static const double _stripHeight = 44;
+
+  /// What sits along the top of the maze: the world's indicator and, for a
+  /// ball that can break, how near it came to breaking.
+  Widget? _indicators() {
+    final badge = _worldBadge();
+    final fragile = game.ball.breaksAt != null;
+    if (badge == null && !fragile) return null;
+    return Row(
+      children: [
+        Expanded(child: badge ?? const SizedBox.shrink()),
+        if (fragile) ...[
+          const SizedBox(width: 8),
+          SizedBox(width: 118, child: _StrainMeter(game: game)),
+        ],
+      ],
+    );
+  }
 
   /// The indicator the current world needs: noise, wind or gravity.
   Widget? _worldBadge() {
@@ -228,12 +245,14 @@ class _Meter extends StatelessWidget {
     required this.label,
     required this.value,
     required this.text,
+    this.textWidth = 64,
   });
 
   final IconData icon;
   final String label;
   final double value;
   final String text;
+  final double textWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -250,8 +269,10 @@ class _Meter extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 8),
-          Text(label, style: cartoon(11, spacing: 1, outline: 1.2)),
-          const SizedBox(width: 8),
+          if (label.isNotEmpty) ...[
+            Text(label, style: cartoon(11, spacing: 1, outline: 1.2)),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(5),
@@ -275,7 +296,7 @@ class _Meter extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 64,
+            width: textWidth,
             child: Text(text,
                 textAlign: TextAlign.right,
                 style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700)),
@@ -284,6 +305,23 @@ class _Meter extends StatelessWidget {
       ),
     );
   }
+}
+
+/// For a ball that can break: how close its hardest recent knock came to
+/// breaking it, so a near miss shows.
+class _StrainMeter extends StatelessWidget {
+  const _StrainMeter({required this.game});
+
+  final GameController game;
+
+  @override
+  Widget build(BuildContext context) => _Meter(
+        icon: Icons.favorite_rounded,
+        label: '',
+        value: game.strain,
+        text: '${(game.strain * 100).round()}%',
+        textWidth: 34,
+      );
 }
 
 /// Always-visible loudness of the ball (forest, city).

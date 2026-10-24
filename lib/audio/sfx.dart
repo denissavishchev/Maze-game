@@ -14,6 +14,7 @@ enum Sound {
   impactStone,
   impactSlime,
   impactPaper,
+  impactBubble,
   wolfWake,
   droneWake,
   ghostWake,
@@ -141,6 +142,14 @@ class Sfx {
           final hp = n - prev;
           prev = n;
           return hp * 0.7 * env(t, 30) * (0.6 + 0.4 * sin(2 * pi * 90 * t));
+        });
+      case Sound.impactBubble:
+        // A soft, wet blip: a short high tone that sags, with a hint of fizz.
+        var fizz = 0.0;
+        return render(0.16, (t) {
+          fizz += (noise() - fizz) * 0.5;
+          final f = 900 - 500 * (t / 0.16);
+          return (sine(f, t) * 0.45 + (noise() - fizz) * 0.15) * env(t, 22) * (1 - exp(-t * 800));
         });
       case Sound.wolfWake:
         // A low growl: a rising throaty tone with a fast tremble and rasp.

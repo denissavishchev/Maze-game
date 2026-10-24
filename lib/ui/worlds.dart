@@ -244,7 +244,7 @@ String hazardNote(GameConfig c) {
         : tr('note.trap.many', {'n': n, 's': trapEvery}),
     WorldKind.graveyard =>
       tr('note.graveyard', {'n': k, 's': trapEvery}),
-    WorldKind.ocean => tr('note.ocean', {'n': c.whirlCount}),
+    WorldKind.ocean => tr('note.ocean', {'n': c.jellyCount}),
     WorldKind.glass => tr('note.glass', {'l': c.beamInterval.toStringAsFixed(1), 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1

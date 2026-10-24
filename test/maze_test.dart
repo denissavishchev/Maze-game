@@ -658,8 +658,8 @@ void main() {
       return (out * (m.radius + 0.6), out);
     }
 
-    test('seven different materials', () {
-      expect(BallKind.values.length, 7);
+    test('eight different materials', () {
+      expect(BallKind.values.length, 8);
       final sizes = {for (final k in BallKind.values) statsOf(k).radius};
       expect(sizes.length, greaterThan(2));
       for (final k in BallKind.values) {

@@ -60,9 +60,9 @@ class GameConfig {
       ? _pick(const [3.0, 3.5, 4.0, 4.5, 5.0])
       : _pick(const [0.0, 0.0, 0.0, 5.5, 7.5]);
 
-  /// Ocean: whirlpools drifting through the corridors, and how fast.
-  int get whirlCount => _pick(const [1, 1, 2, 2, 3]);
-  double get whirlSpeed => 0.8 + 0.12 * (level - minLevel);
+  /// Ocean: jellyfish patrolling the corridors, and how fast they swim.
+  int get jellyCount => _pick(const [2, 2, 3, 3, 4]);
+  double get jellySpeed => 0.55 + 0.08 * (level - minLevel);
 
   /// Wolves or drones.
   int get chaserCount => _pick(const [1, 1, 2, 2, 3]);

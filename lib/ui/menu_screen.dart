@@ -169,7 +169,8 @@ class _SelectScreenState extends State<SelectScreen> {
                     child,
                     const SizedBox(height: 4),
                     Text(
-                      name,
+                      name.replaceAll(' ', '\n'),
+                      textAlign: TextAlign.center,
                       style: cartoon(11,
                           outline: 1.2,
                           weight: selected ? FontWeight.w900 : FontWeight.w700,
