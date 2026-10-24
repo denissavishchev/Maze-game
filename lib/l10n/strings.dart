@@ -152,6 +152,15 @@ const _tables = <AppLang, Map<String, String>>{
     'bonus.space': 'Stabilizator',
     'bonus.graveyard': 'Święta woda',
     'bonus.glass': 'Pryzmat',
+    'bonus.ocean': 'Kotwica',
+    'world.ocean.name': 'Ocean',
+    'world.ocean.blurb':
+        'Pod wodą. Prądy znoszą kulkę w bok, a wiry wędrują korytarzami i wciągają ją do środka. Lekkie kulki znosi mocniej.',
+    'note.ocean': 'wiry: {n} · prądy znoszą kulkę',
+    'notice.current': 'Nadchodzi prąd!',
+    'current.now': 'PRĄD!',
+    'current.coming': 'NADCHODZI PRĄD',
+    'lose.whirl': 'Wir wciągnął kulkę!',
     'world.glass.name': 'Szkło',
     'world.glass.blurb':
         'Szklana podłoga kruszy się pod kulką, która stoi w miejscu, a lasery przecinają cały rząd albo kolumnę labiryntu.',
@@ -296,6 +305,15 @@ const _tables = <AppLang, Map<String, String>>{
     'bonus.space': 'Stabilizer',
     'bonus.graveyard': 'Holy water',
     'bonus.glass': 'Prism',
+    'bonus.ocean': 'Anchor',
+    'world.ocean.name': 'Ocean',
+    'world.ocean.blurb':
+        'Underwater. Currents carry the ball sideways, and whirlpools drift through the corridors and pull it in. Light balls are swept along harder.',
+    'note.ocean': 'whirlpools: {n} · currents carry the ball',
+    'notice.current': 'A current is coming!',
+    'current.now': 'CURRENT!',
+    'current.coming': 'CURRENT COMING',
+    'lose.whirl': 'The whirlpool swallowed the ball!',
     'world.glass.name': 'Glass',
     'world.glass.blurb':
         'The glass floor crumbles under a ball that stands still, and lasers cut a whole row or column of the maze.',
@@ -440,6 +458,15 @@ const _tables = <AppLang, Map<String, String>>{
     'bonus.space': 'Стабилизатор',
     'bonus.graveyard': 'Святая вода',
     'bonus.glass': 'Призма',
+    'bonus.ocean': 'Якорь',
+    'world.ocean.name': 'Океан',
+    'world.ocean.blurb':
+        'Под водой. Течения сносят шарик в сторону, а водовороты бродят по коридорам и затягивают его. Лёгкие шарики сносит сильнее.',
+    'note.ocean': 'водовороты: {n} · течения сносят шарик',
+    'notice.current': 'Идёт течение!',
+    'current.now': 'ТЕЧЕНИЕ!',
+    'current.coming': 'ИДЁТ ТЕЧЕНИЕ',
+    'lose.whirl': 'Водоворот затянул шарик!',
     'world.glass.name': 'Стекло',
     'world.glass.blurb':
         'Стеклянный пол крошится под стоящим шариком, а лазеры рассекают целый ряд или столбец лабиринта.',

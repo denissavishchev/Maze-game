@@ -110,6 +110,16 @@ class SecurityCamera {
   double alert = 0;
 }
 
+/// Ocean: a whirlpool drifting along the corridors. It pulls the ball in and
+/// swirls it round; right in its eye the ball is lost.
+class Whirl {
+  Whirl(this.home) : pos = home;
+
+  final Offset home;
+  Offset pos;
+  final List<Offset> route = [];
+}
+
 /// Glass: a spot of floor that crumbles while the ball stands on it. [level]
 /// runs from 0 (whole) to 1 (gone); [stage] is the cracking seen in 4 steps.
 class Crumble {
@@ -353,6 +363,12 @@ class GameController extends ChangeNotifier {
   List<MudPatch> fog = [];
   List<Burst> bursts = [];
 
+  /// Ocean: whirlpools wandering the maze.
+  List<Whirl> whirls = [];
+  static const double whirlReach = 1.3;
+  static const double whirlEye = 0.28;
+  static const double whirlPull = 9;
+
   /// Glass: crumbling floor and the laser beams.
   List<Crumble> cracks = [];
   List<GlassBeam> beams = [];
@@ -506,6 +522,8 @@ class GameController extends ChangeNotifier {
     airlocks = [];
     cameras = [];
     if (config.world == WorldKind.space) _placeSpaceHazards();
+    whirls = [];
+    if (config.world == WorldKind.ocean) _placeWhirls();
     restart();
   }
 
@@ -564,6 +582,19 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Ocean: whirlpools start in cells well away from the start.
+  void _placeWhirls() {
+    final special = {maze.start, maze.goal, ...maze.buttonCells};
+    final start = maze.cellCenter(maze.start);
+    final cells = [
+      for (var c = 1; c < maze.cellCount; c++)
+        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 4) c,
+    ]..shuffle(_rnd);
+    for (final c in cells.take(config.whirlCount)) {
+      whirls.add(Whirl(maze.cellCenter(c)));
+    }
+  }
+
   /// Same maze, everything back to its starting state.
   void restart() {
     gateOpen = List<bool>.filled(maze.gateCount, false);
@@ -599,6 +630,10 @@ class GameController extends ChangeNotifier {
     _spaceClock = 0;
     cracks = [];
     beams = [];
+    for (final w in whirls) {
+      w.pos = w.home;
+      w.route.clear();
+    }
     _beamTimer = config.beamInterval;
     _beamNoticed = false;
     for (final cam in cameras) {
@@ -659,7 +694,7 @@ class GameController extends ChangeNotifier {
     if (!started && tilt.distance > startTilt) started = true;
     if (started) elapsed += dt;
 
-    if (config.world == WorldKind.mountains &&
+    if ((config.world == WorldKind.mountains || config.world == WorldKind.ocean) &&
         config.windEnabled &&
         hazardsEnabled &&
         started) {
@@ -975,7 +1010,7 @@ class GameController extends ChangeNotifier {
       final a = _rnd.nextInt(8) * pi / 4;
       windDir = Offset(cos(a), sin(a));
       windWarnLeft = windWarning;
-      notice = 'notice.wind';
+      notice = config.world == WorldKind.ocean ? 'notice.current' : 'notice.wind';
       noticeArgs = const {};
       noticeLeft = windWarning;
     }
@@ -989,7 +1024,7 @@ class GameController extends ChangeNotifier {
     final tiltPower = tilt.distance;
     final eased = tiltPower < 1e-6 ? Offset.zero : tilt * pow(tiltPower, 0.6).toDouble();
     vel += eased * (_accel * ball.accel * dt);
-    if (windLeft > 0) {
+    if (windLeft > 0 && !(config.world == WorldKind.ocean && bonusLeft > 0)) {
       vel += windDir * (config.windStrength * (1 - ball.windResist) * dt);
     }
     if (gravityActive) vel += gravityDir * (config.gravityStrength * dt);
@@ -1141,6 +1176,7 @@ class GameController extends ChangeNotifier {
       case WorldKind.underground:
       case WorldKind.space:
       case WorldKind.glass:
+      case WorldKind.ocean:
         break; // the light, the stabilizer and the prism work through [bonusLeft]
     }
     notifyListeners();
@@ -1392,6 +1428,8 @@ class GameController extends ChangeNotifier {
         }
       case WorldKind.glass:
         _updateGlass(dt);
+      case WorldKind.ocean:
+        _updateWhirls(dt);
       case WorldKind.graveyard:
         for (final g in creatures) {
           if (g.lockLeft > 0) {
@@ -1485,6 +1523,41 @@ class GameController extends ChangeNotifier {
   }
 
   // ---- glass ------------------------------------------------------------
+
+  void _updateWhirls(double dt) {
+    // The anchor holds everything still.
+    if (bonusLeft > 0) return;
+    for (final w in whirls) {
+      if (w.route.isEmpty) {
+        final to = _rnd.nextInt(maze.cellCount);
+        final path = maze.path(maze.cellAt(w.pos), to, gateOpen);
+        if (path != null && path.length > 1) {
+          w.route.addAll(maze.routePoints(path).skip(1));
+        }
+      }
+      if (w.route.isNotEmpty) {
+        final d = w.route.first - w.pos;
+        final step = config.whirlSpeed * dt;
+        if (d.distance <= step) {
+          w.pos = w.route.removeAt(0);
+        } else {
+          w.pos += d / d.distance * step;
+        }
+      }
+      final to = w.pos - pos;
+      final dist = to.distance;
+      if (dist >= whirlReach) continue;
+      if (dist < whirlEye) {
+        _lose('lose.whirl');
+        return;
+      }
+      final k = 1 - dist / whirlReach;
+      final dir = to / dist;
+      final swirl = Offset(-dir.dy, dir.dx);
+      final heavy = 1 - ball.windResist * 0.8;
+      vel += (dir * whirlPull + swirl * 3) * (k * heavy * dt);
+    }
+  }
 
   void _updateGlass(double dt) {
     final shielded = bonusLeft > 0;

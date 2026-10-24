@@ -124,6 +124,9 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
       c.clipPath(Path()..addOval(Rect.fromCircle(center: Offset.zero, radius: R)));
       _reflections(c, Rect.fromCircle(center: Offset.zero, radius: R));
       c.restore();
+    case FloorStyle.seabed:
+      _seabed(c, rnd, Rect.fromCircle(center: Offset.zero, radius: R), t,
+          clip: Path()..addOval(Rect.fromCircle(center: Offset.zero, radius: R)));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rings.
       var ring = 0;
@@ -160,6 +163,56 @@ void _reflections(Canvas c, Rect area) {
       ..close();
     c.drawPath(band, Paint()..color = Colors.white.withValues(alpha: 0.13));
   }
+}
+
+/// Wavy ripples in the sand of the sea floor, a few shells and bands of
+/// light that wobble across it.
+void _seabed(Canvas c, Random rnd, Rect area, WorldTheme t, {Path? clip}) {
+  c.save();
+  if (clip != null) c.clipPath(clip);
+  final ripple = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = 0.035
+    ..color = t.floorDark.withValues(alpha: 0.7);
+  final n = (area.width * area.height * 0.9).round();
+  for (var i = 0; i < n; i++) {
+    final p = Offset(area.left + rnd.nextDouble() * area.width, area.top + rnd.nextDouble() * area.height);
+    final w = 0.25 + rnd.nextDouble() * 0.3;
+    c.drawPath(
+      Path()
+        ..moveTo(p.dx - w, p.dy)
+        ..quadraticBezierTo(p.dx - w / 2, p.dy - 0.09, p.dx, p.dy)
+        ..quadraticBezierTo(p.dx + w / 2, p.dy + 0.09, p.dx + w, p.dy),
+      ripple,
+    );
+  }
+  for (var i = 0; i < n ~/ 6; i++) {
+    final p = Offset(area.left + rnd.nextDouble() * area.width, area.top + rnd.nextDouble() * area.height);
+    final s = 0.05 + rnd.nextDouble() * 0.05;
+    c.drawOval(Rect.fromCenter(center: p, width: s * 2.4, height: s * 1.7),
+        Paint()..color = const Color(0xFFFFE9D6).withValues(alpha: 0.8));
+    c.drawLine(p.translate(-s, 0), p.translate(s, 0),
+        Paint()..strokeWidth = 0.015..color = t.floorDark);
+  }
+  // Light through the surface: a net of bright wobbly lines.
+  final caustic = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = 0.05
+    ..color = Colors.white.withValues(alpha: 0.2);
+  for (var i = 0; i < n ~/ 3; i++) {
+    final p = Offset(area.left + rnd.nextDouble() * area.width, area.top + rnd.nextDouble() * area.height);
+    final a = rnd.nextDouble() * kTwoPi;
+    c.drawPath(
+      Path()
+        ..moveTo(p.dx, p.dy)
+        ..quadraticBezierTo(p.dx + cos(a) * 0.35, p.dy + sin(a) * 0.35,
+            p.dx + cos(a + 1.1) * 0.6, p.dy + sin(a + 1.1) * 0.6),
+      caustic,
+    );
+  }
+  c.restore();
 }
 
 // ---- walls -----------------------------------------------------------------
@@ -204,6 +257,7 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
       WallStyle.castle => 0.5,
       WallStyle.hull => 0.3,
       WallStyle.glass => 0.26,
+      WallStyle.coral => 0.2,
     };
     var k = 0;
     for (var d = 0.0; d < metric.length; d += step, k++) {
@@ -247,6 +301,16 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
             c.drawLine(tan.position + normal * 0.1 + tan.vector * 0.06,
                 tan.position - normal * 0.1 - tan.vector * 0.06,
                 light.withAlpha(k % 4 == 0 ? 190 : 110)..strokeWidth = k % 4 == 0 ? 0.05 : 0.025);
+          }
+        case WallStyle.coral:
+          // Knobbly polyps, and now and then a little forked branch.
+          c.drawCircle(tan.position + normal * side * 0.5, 0.045 + rnd.nextDouble() * 0.04,
+              rnd.nextBool() ? light.withAlpha(170) : shade);
+          if (k % 5 == 0) {
+            final tip = tan.position + normal * (rnd.nextBool() ? 0.17 : -0.17);
+            c.drawLine(tan.position, tip, joint..strokeWidth = 0.05);
+            c.drawLine(tip, tip + normal * 0.0 + tan.vector * 0.08, joint);
+            c.drawCircle(tip, 0.035, light);
           }
         case WallStyle.hull:
           // Panel seams across the wall and a rivet between them.
@@ -574,6 +638,51 @@ void _scenery(Canvas c, WorldTheme t, Random rnd, _Spot spot) {
         );
         c.drawCircle(p.translate(-r * 0.35, -r * 0.35), r * 0.18, Paint()..color = Colors.white.withValues(alpha: 0.8));
       }
+    case Scenery.reef:
+      // Coral heads, swaying seaweed, fish and rising bubbles.
+      const corals = [
+        (Color(0xFFD94F70), Color(0xFFFF7F86), Color(0xFFFFD6C4)),
+        (Color(0xFFE08A2E), Color(0xFFFFB347), Color(0xFFFFE3A8)),
+        (Color(0xFF7B52C4), Color(0xFFB08CFF), Color(0xFFE6D8FF)),
+      ];
+      for (var i = 0; i < 45; i++) {
+        final (a, b, h) = corals[rnd.nextInt(corals.length)];
+        _bush(c, spot(1.9, 10), 0.5 + rnd.nextDouble() * 0.55, a, b, h);
+      }
+      for (var i = 0; i < 60; i++) {
+        final p = spot(1.9, 10);
+        final h = 0.8 + rnd.nextDouble() * 0.9;
+        final lean = (rnd.nextDouble() - 0.5) * 0.8;
+        final blade = Path()
+          ..moveTo(p.dx, p.dy)
+          ..quadraticBezierTo(p.dx + lean, p.dy - h * 0.5, p.dx - lean * 0.4, p.dy - h);
+        c.drawPath(blade, Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = 0.2..color = _ink);
+        c.drawPath(blade, Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = 0.13..color = const Color(0xFF3BA55D));
+      }
+      for (var i = 0; i < 26; i++) {
+        final p = spot(1.9, 10);
+        final dir = rnd.nextBool() ? 1.0 : -1.0;
+        final body = rnd.nextBool() ? const Color(0xFFFFA630) : const Color(0xFF42C6E8);
+        final s = 0.22 + rnd.nextDouble() * 0.2;
+        final tail = Path()
+          ..moveTo(p.dx - dir * s * 0.8, p.dy)
+          ..lineTo(p.dx - dir * s * 1.5, p.dy - s * 0.6)
+          ..lineTo(p.dx - dir * s * 1.5, p.dy + s * 0.6)
+          ..close();
+        c.drawPath(tail, Paint()..color = _ink);
+        c.drawOval(Rect.fromCenter(center: p, width: s * 2.5, height: s * 1.5), Paint()..color = _ink);
+        c.drawPath(tail, Paint()..color = body);
+        c.drawOval(Rect.fromCenter(center: p, width: s * 2.2, height: s * 1.2), Paint()..color = body);
+        c.drawCircle(p.translate(dir * s * 0.6, -s * 0.12), s * 0.12, Paint()..color = Colors.white);
+        c.drawCircle(p.translate(dir * s * 0.65, -s * 0.12), s * 0.06, Paint()..color = _ink);
+      }
+      for (var i = 0; i < 60; i++) {
+        final p = spot(1.9, 10);
+        final r = 0.08 + rnd.nextDouble() * 0.2;
+        c.drawCircle(p, r, Paint()..color = Colors.white.withValues(alpha: 0.12));
+        c.drawCircle(p, r, Paint()..style = PaintingStyle.stroke..strokeWidth = 0.035..color = Colors.white.withValues(alpha: 0.55));
+        c.drawCircle(p.translate(-r * 0.35, -r * 0.35), r * 0.18, Paint()..color = Colors.white.withValues(alpha: 0.8));
+      }
     case Scenery.graveyard:
       // Headstones, crosses, dead trees and wisps of mist under the moon.
       for (var i = 0; i < 30; i++) {
@@ -812,6 +921,8 @@ void _rectFloor(Canvas c, Rect bounds, WorldTheme t, Random rnd) {
       c.clipRect(bounds);
       _reflections(c, bounds);
       c.restore();
+    case FloorStyle.seabed:
+      _seabed(c, rnd, bounds, t, clip: Path()..addRect(bounds));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rows.
       var row = 0;

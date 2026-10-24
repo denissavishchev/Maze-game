@@ -4,13 +4,13 @@ import '../game/world.dart';
 import '../l10n/strings.dart';
 
 /// What is scattered around the outside of the maze.
-enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard, prisms }
+enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard, prisms, reef }
 
 /// How the walls are drawn.
-enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull, glass }
+enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull, glass, coral }
 
 /// How the floor is drawn.
-enum FloorStyle { sand, flagstone, cobble, deck, ice }
+enum FloorStyle { sand, flagstone, cobble, deck, ice, seabed }
 
 class WorldTheme {
   const WorldTheme({
@@ -210,6 +210,23 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
           panelBottom: Color(0xEE0E2A33),
           accent: Color(0xFF5ED8C8),
         ),
+      WorldKind.ocean => const WorldTheme(
+          id: 'ocean',
+          icon: Icons.waves_rounded,
+          bg: Color(0xFF0A3B63),
+          floor: Color(0xFFC3C79B),
+          floorDark: Color(0xFF7F9F86),
+          wallBase: Color(0xFF9B3A55),
+          wallMain: Color(0xFFFF7F86),
+          wallHi: Color(0xFFFFD6C4),
+          gate: Color(0xFFE0A33C),
+          scenery: Scenery.reef,
+          wallStyle: WallStyle.coral,
+          floorStyle: FloorStyle.seabed,
+          panelTop: Color(0xEE0F4C75),
+          panelBottom: Color(0xEE082A47),
+          accent: Color(0xFF3FD0E0),
+        ),
     };
 
 /// Level-specific numbers for the select screen.
@@ -227,6 +244,7 @@ String hazardNote(GameConfig c) {
         : tr('note.trap.many', {'n': n, 's': trapEvery}),
     WorldKind.graveyard =>
       tr('note.graveyard', {'n': k, 's': trapEvery}),
+    WorldKind.ocean => tr('note.ocean', {'n': c.whirlCount}),
     WorldKind.glass => tr('note.glass', {'l': c.beamInterval.toStringAsFixed(1), 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1

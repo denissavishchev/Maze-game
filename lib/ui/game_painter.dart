@@ -147,6 +147,9 @@ class GamePainter extends CustomPainter {
     for (final k in game.cracks) {
       _crack(canvas, k, t);
     }
+    for (final w in game.whirls) {
+      _whirl(canvas, w, t);
+    }
     for (final l in game.lasers) {
       _laser(canvas, l, t);
     }
@@ -211,7 +214,8 @@ class GamePainter extends CustomPainter {
     if (!active && game.windWarnLeft <= 0) return;
     final dir = game.windDir;
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: active ? 0.5 : 0.2)
+      ..color = (game.config.world == WorldKind.ocean ? const Color(0xFF9FF0FF) : Colors.white)
+          .withValues(alpha: active ? 0.5 : 0.2)
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
     final len = active ? 80.0 : 40.0;
@@ -442,6 +446,22 @@ class GamePainter extends CustomPainter {
           );
           c.drawCircle(p.translate(0, -0.2), 0.045, Paint()..color = const Color(0xFFFFE9A8));
         }
+      case WorldKind.ocean:
+        // A scallop shell holding a pearl that glows until pressed.
+        disc(r + 0.03, const Color(0xFF8A4A5A), const Color(0xFF4E2432));
+        disc(r - 0.03, const Color(0xFFFFD6C4), const Color(0xFFE59A92));
+        for (var i = -3; i <= 3; i++) {
+          c.drawLine(p.translate(0, 0.17), p + polar(0.2, -pi / 2 + i * 0.4),
+              Paint()..strokeWidth = 0.03..color = const Color(0xFFB8636C)..strokeCap = StrokeCap.round);
+        }
+        c.drawCircle(p, 0.09, Paint()..color = used ? const Color(0xFFB9B3BD) : Colors.white);
+        c.drawCircle(p.translate(-0.03, -0.03), 0.03, Paint()..color = Colors.white.withValues(alpha: 0.9));
+        if (!used) {
+          c.drawCircle(p, 0.2, Paint()..shader = ui.Gradient.radial(p, 0.2, [
+            Colors.white.withValues(alpha: 0.5),
+            Colors.white.withValues(alpha: 0),
+          ]));
+        }
       case WorldKind.glass:
         // A glass pad with a small prism that glows until pressed.
         disc(r + 0.03, const Color(0xFF2B6F93), const Color(0xFF153A50));
@@ -579,6 +599,12 @@ class GamePainter extends CustomPainter {
         c.drawPath(drop, line);
         c.drawLine(p.translate(0, -0.03), p.translate(0, 0.09), line);
         c.drawLine(p.translate(-0.05, 0.02), p.translate(0.05, 0.02), line);
+      case WorldKind.ocean:
+        // An anchor: currents and whirlpools hold still.
+        c.drawCircle(p.translate(0, -0.13), 0.04, line);
+        c.drawLine(p.translate(0, -0.09), p.translate(0, 0.14), line);
+        c.drawLine(p.translate(-0.07, -0.03), p.translate(0.07, -0.03), line);
+        c.drawArc(Rect.fromCenter(center: p.translate(0, 0.04), width: 0.28, height: 0.2), 0.2, pi - 0.4, false, line);
       case WorldKind.glass:
         // A prism splitting light: the lasers and the floor
         // leave you alone.
@@ -839,6 +865,47 @@ class GamePainter extends CustomPainter {
     final blink = sin(t * 6 + cam.phase) > 0.2;
     c.drawCircle(cam.pos.translate(-0.06, -0.06), 0.03,
         Paint()..color = (blink || k > 0 ? const Color(0xFFFF3B3B) : const Color(0xFF5A1E1E)));
+  }
+
+  /// A whirlpool: spiral arms turning round a dark eye, ringed by foam.
+  void _whirl(Canvas c, Whirl w, double t) {
+    const reach = GameController.whirlReach;
+    c.drawCircle(
+      w.pos,
+      reach,
+      Paint()
+        ..shader = ui.Gradient.radial(w.pos, reach, [
+          const Color(0xFF031A33).withValues(alpha: 0.55),
+          const Color(0xFF3FD0E0).withValues(alpha: 0.12),
+          const Color(0xFF3FD0E0).withValues(alpha: 0),
+        ], const [0, 0.55, 1]),
+    );
+    for (var arm = 0; arm < 3; arm++) {
+      final path = Path();
+      for (var i = 0; i <= 24; i++) {
+        final k = i / 24;
+        final a = arm * 2 * pi / 3 - t * 2.4 + k * 4.2;
+        final q = w.pos + polar(0.16 + k * (reach - 0.2), a);
+        i == 0 ? path.moveTo(q.dx, q.dy) : path.lineTo(q.dx, q.dy);
+      }
+      c.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 0.07
+          ..color = Colors.white.withValues(alpha: 0.55),
+      );
+    }
+    c.drawCircle(w.pos, GameController.whirlEye, Paint()..color = const Color(0xFF021226));
+    c.drawCircle(
+      w.pos,
+      GameController.whirlEye,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.04
+        ..color = Colors.white.withValues(alpha: 0.7),
+    );
   }
 
   /// Cracking floor: hairlines at first, then wider cracks, then missing

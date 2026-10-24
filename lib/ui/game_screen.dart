@@ -199,6 +199,7 @@ class _GameScreenState extends State<GameScreen>
       case WorldKind.city:
         return _NoiseMeter(game: game);
       case WorldKind.mountains:
+      case WorldKind.ocean:
         return game.windLeft > 0 || game.windWarnLeft > 0
             ? _WindBadge(game: game)
             : null;
@@ -331,7 +332,10 @@ class _WindBadge extends StatelessWidget {
               child: Icon(Icons.arrow_forward_rounded, color: color, size: 28),
             ),
             const SizedBox(width: 8),
-            Text(active ? tr('wind.now') : tr('wind.coming'),
+            Text(
+                active
+                    ? tr(game.config.world == WorldKind.ocean ? 'current.now' : 'wind.now')
+                    : tr(game.config.world == WorldKind.ocean ? 'current.coming' : 'wind.coming'),
                 style: cartoon(15, color: color, outline: 1.5)),
           ],
         ),
@@ -410,6 +414,7 @@ class _BonusButton extends StatelessWidget {
         WorldKind.space => Icons.gps_fixed_rounded,
         WorldKind.graveyard => Icons.church_rounded,
         WorldKind.glass => Icons.change_history_rounded,
+        WorldKind.ocean => Icons.anchor_rounded,
       };
 
   @override

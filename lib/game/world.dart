@@ -1,7 +1,7 @@
 import '../l10n/strings.dart';
 import 'ball.dart';
 
-enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass }
+enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass, ocean }
 
 /// A chosen world and one of five levels. The level sets everything that
 /// makes the game harder: maze size, number of buttons (and gates), number of
@@ -53,10 +53,16 @@ class GameConfig {
   double get aimedWarn => _pick(const [1.5, 1.4, 1.3, 1.15, 1.0]);
 
   /// Mountains: gusts of wind only on the two biggest sizes.
-  bool get windEnabled => level >= 4;
+  bool get windEnabled => world == WorldKind.ocean || level >= 4;
 
   /// Acceleration of a gust, in units per second squared.
-  double get windStrength => _pick(const [0.0, 0.0, 0.0, 5.5, 7.5]);
+  double get windStrength => world == WorldKind.ocean
+      ? _pick(const [3.0, 3.5, 4.0, 4.5, 5.0])
+      : _pick(const [0.0, 0.0, 0.0, 5.5, 7.5]);
+
+  /// Ocean: whirlpools drifting through the corridors, and how fast.
+  int get whirlCount => _pick(const [1, 1, 2, 2, 3]);
+  double get whirlSpeed => 0.8 + 0.12 * (level - minLevel);
 
   /// Wolves or drones.
   int get chaserCount => _pick(const [1, 1, 2, 2, 3]);
