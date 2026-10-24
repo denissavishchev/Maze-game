@@ -13,6 +13,7 @@ enum Sound {
   impactGlass,
   impactStone,
   impactSlime,
+  impactPaper,
   wolfWake,
   droneWake,
   ghostWake,
@@ -131,6 +132,15 @@ class Sfx {
           return (sine(f, t) * 0.8 + wet * 0.9 * env(t, 45)) *
               (1 - exp(-t * 500)) *
               env(t, 18);
+        });
+      case Sound.impactPaper:
+        // A dry rustle: a short burst of high-passed noise, no tone at all.
+        var prev = 0.0;
+        return render(0.14, (t) {
+          final n = noise();
+          final hp = n - prev;
+          prev = n;
+          return hp * 0.7 * env(t, 30) * (0.6 + 0.4 * sin(2 * pi * 90 * t));
         });
       case Sound.wolfWake:
         // A low growl: a rising throaty tone with a fast tremble and rasp.

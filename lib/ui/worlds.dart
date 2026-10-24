@@ -4,13 +4,13 @@ import '../game/world.dart';
 import '../l10n/strings.dart';
 
 /// What is scattered around the outside of the maze.
-enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard }
+enum Scenery { trees, swamp, snowPines, crystals, houses, space, graveyard, prisms }
 
 /// How the walls are drawn.
-enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull }
+enum WallStyle { hedge, mossRock, snowRock, brick, castle, hull, glass }
 
 /// How the floor is drawn.
-enum FloorStyle { sand, flagstone, cobble, deck }
+enum FloorStyle { sand, flagstone, cobble, deck, ice }
 
 class WorldTheme {
   const WorldTheme({
@@ -193,6 +193,23 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
           panelBottom: Color(0xEE1B1A2C),
           accent: Color(0xFFB39DDB),
         ),
+      WorldKind.glass => const WorldTheme(
+          id: 'glass',
+          icon: Icons.wine_bar_rounded,
+          bg: Color(0xFF173A52),
+          floor: Color(0xFFD3EAF4),
+          floorDark: Color(0xFF9CC6DA),
+          wallBase: Color(0xFF2B6F93),
+          wallMain: Color(0xFF8ED6F2),
+          wallHi: Color(0xFFFFFFFF),
+          gate: Color(0xFFB8A4F2),
+          scenery: Scenery.prisms,
+          wallStyle: WallStyle.glass,
+          floorStyle: FloorStyle.ice,
+          panelTop: Color(0xEE24506E),
+          panelBottom: Color(0xEE12283A),
+          accent: Color(0xFF7FE0F5),
+        ),
     };
 
 /// Level-specific numbers for the select screen.
@@ -210,6 +227,7 @@ String hazardNote(GameConfig c) {
         : tr('note.trap.many', {'n': n, 's': trapEvery}),
     WorldKind.graveyard =>
       tr('note.graveyard', {'n': k, 's': trapEvery}),
+    WorldKind.glass => tr('note.glass', {'m': c.mirrorCount, 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1
         ? tr('note.boulder.one', {'s': boulderEvery})

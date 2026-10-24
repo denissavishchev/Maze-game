@@ -409,6 +409,7 @@ class _BonusButton extends StatelessWidget {
         WorldKind.city => Icons.power_settings_new_rounded,
         WorldKind.space => Icons.gps_fixed_rounded,
         WorldKind.graveyard => Icons.church_rounded,
+        WorldKind.glass => Icons.change_history_rounded,
       };
 
   @override

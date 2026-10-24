@@ -144,6 +144,12 @@ class GamePainter extends CustomPainter {
     for (final a in game.airlocks) {
       _airlock(canvas, a, t);
     }
+    for (final k in game.cracks) {
+      _crack(canvas, k, t);
+    }
+    for (final m in game.mirrors) {
+      _mirror(canvas, m, t);
+    }
     for (final l in game.lasers) {
       _laser(canvas, l, t);
     }
@@ -172,6 +178,9 @@ class GamePainter extends CustomPainter {
     }
     if (game.bonusLeft > 0) _aura(canvas, t);
     _ball(canvas);
+    for (final b in game.beams) {
+      _beam(canvas, b, t);
+    }
     for (final b in game.bursts) {
       _burst(canvas, b);
     }
@@ -436,6 +445,37 @@ class GamePainter extends CustomPainter {
           );
           c.drawCircle(p.translate(0, -0.2), 0.045, Paint()..color = const Color(0xFFFFE9A8));
         }
+      case WorldKind.glass:
+        // A glass pad with a small prism that glows until pressed.
+        disc(r + 0.03, const Color(0xFF2B6F93), const Color(0xFF153A50));
+        disc(r - 0.03, const Color(0xFFCFEFFF), const Color(0xFF6FB8D8));
+        final prism = Path()
+          ..moveTo(p.dx, p.dy - 0.17)
+          ..lineTo(p.dx + 0.15, p.dy + 0.11)
+          ..lineTo(p.dx - 0.15, p.dy + 0.11)
+          ..close();
+        c.drawPath(
+          prism,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.05
+            ..strokeJoin = StrokeJoin.round
+            ..color = used ? const Color(0xFF7FA3B8) : Colors.white,
+        );
+        if (!used) {
+          c.drawLine(p.translate(-0.2, -0.02), p.translate(-0.03, 0.0),
+              Paint()..color = Colors.white..strokeWidth = 0.03..strokeCap = StrokeCap.round);
+          for (var i = 0; i < 3; i++) {
+            c.drawLine(
+              p.translate(0.03, 0.0 + i * 0.03),
+              p.translate(0.2, -0.04 + i * 0.07),
+              Paint()
+                ..color = [const Color(0xFFFF6B9D), const Color(0xFFFFE066), const Color(0xFF66E0FF)][i]
+                ..strokeWidth = 0.03
+                ..strokeCap = StrokeCap.round,
+            );
+          }
+        }
       case WorldKind.space:
         final glow = used ? 0.0 : 0.5 + 0.5 * sin(t * 4 + j);
         c.drawCircle(
@@ -542,6 +582,19 @@ class GamePainter extends CustomPainter {
         c.drawPath(drop, line);
         c.drawLine(p.translate(0, -0.03), p.translate(0, 0.09), line);
         c.drawLine(p.translate(-0.05, 0.02), p.translate(0.05, 0.02), line);
+      case WorldKind.glass:
+        // A prism splitting light: the lasers, the mirrors and the floor
+        // leave you alone.
+        c.drawPath(
+          Path()
+            ..moveTo(p.dx, p.dy - 0.15)
+            ..lineTo(p.dx + 0.14, p.dy + 0.11)
+            ..lineTo(p.dx - 0.14, p.dy + 0.11)
+            ..close(),
+          line,
+        );
+        c.drawLine(p.translate(-0.2, 0.0), p.translate(-0.04, 0.02), line);
+        c.drawLine(p.translate(0.05, 0.02), p.translate(0.2, 0.09), line..color = const Color(0xFFFF6B9D));
       case WorldKind.space:
         // Crosshair: the stabilizer holds the ball steady.
         c.drawCircle(p, 0.1, line);
@@ -789,6 +842,121 @@ class GamePainter extends CustomPainter {
     final blink = sin(t * 6 + cam.phase) > 0.2;
     c.drawCircle(cam.pos.translate(-0.06, -0.06), 0.03,
         Paint()..color = (blink || k > 0 ? const Color(0xFFFF3B3B) : const Color(0xFF5A1E1E)));
+  }
+
+  /// A mirror set into a wall: a bright panel with a moving shine and a
+  /// glowing mark, flaring when it has just thrown the ball.
+  void _mirror(Canvas c, Mirror m, double t) {
+    final a = m.seg.a, b = m.seg.b;
+    final len = (b - a).distance;
+    if (len < 1e-6) return;
+    final dir = (b - a) / len;
+    final p0 = a + dir * (len * 0.08);
+    final p1 = b - dir * (len * 0.08);
+    Paint line(Color color, double width) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = width
+      ..color = color;
+    c.drawLine(p0, p1, line(Palette.ink, 0.34));
+    c.drawLine(p0, p1, line(const Color(0xFF9FB6C8), 0.28));
+    c.drawLine(p0, p1, line(const Color(0xFFEAF8FF), 0.2));
+    // A band of light sliding along the panel.
+    final u = (t * 0.45 + m.center.dx * 0.37) % 1.4 - 0.2;
+    if (u > 0 && u < 1) {
+      final s = p0 + (p1 - p0) * u;
+      c.drawLine(s, s + (p1 - p0) * 0.12, line(Colors.white, 0.14));
+    }
+    final glow = 0.5 + 0.5 * sin(t * 3 + m.center.dy);
+    final mid = m.center;
+    c.drawCircle(
+      mid,
+      0.42 + 0.3 * m.flash,
+      Paint()
+        ..shader = ui.Gradient.radial(mid, 0.42 + 0.3 * m.flash, [
+          const Color(0xFF7FE0F5).withValues(alpha: 0.25 + 0.2 * glow + 0.5 * m.flash),
+          const Color(0xFF7FE0F5).withValues(alpha: 0),
+        ]),
+    );
+    c.drawCircle(mid, 0.05, Paint()..color = const Color(0xFF29A8D6));
+  }
+
+  /// Cracking floor: hairlines at first, then wider cracks, then missing
+  /// chips, and finally a hole.
+  void _crack(Canvas c, Crumble k, double t) {
+    if (k.level < 0.05) return;
+    final rnd = Random((k.pos.dx * 997 + k.pos.dy * 131).round());
+    final level = k.level.clamp(0.0, 1.0);
+    final reach = 0.28 + 0.4 * level;
+    final shake = k.stage >= 3 ? Offset(sin(t * 60), cos(t * 53)) * 0.012 : Offset.zero;
+    final center = k.pos + shake;
+    if (level > 0.5) {
+      // Chips that have already fallen away.
+      final hole = Path();
+      const n = 9;
+      for (var i = 0; i < n; i++) {
+        final q = center + polar(reach * (0.35 + 0.25 * rnd.nextDouble()), i * 2 * pi / n);
+        i == 0 ? hole.moveTo(q.dx, q.dy) : hole.lineTo(q.dx, q.dy);
+      }
+      c.drawPath(hole..close(), Paint()..color = const Color(0xFF0C2230).withValues(alpha: (level - 0.5) * 1.6));
+    }
+    final dark = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 0.02 + 0.03 * level
+      ..color = const Color(0xFF2E6C8C).withValues(alpha: 0.9);
+    final light = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 0.012
+      ..color = Colors.white.withValues(alpha: 0.8);
+    final lines = 3 + (level * 7).floor();
+    for (var i = 0; i < lines; i++) {
+      final a = i * 2 * pi / lines + rnd.nextDouble() * 0.5;
+      final len = reach * (0.6 + 0.4 * rnd.nextDouble());
+      final mid = center + polar(len * 0.5, a + (rnd.nextDouble() - 0.5) * 0.7);
+      final end = center + polar(len, a);
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..lineTo(mid.dx, mid.dy)
+        ..lineTo(end.dx, end.dy);
+      c.drawPath(path, dark);
+      c.save();
+      c.translate(-0.012, -0.012);
+      c.drawPath(path, light);
+      c.restore();
+    }
+  }
+
+  /// A laser cutting the whole maze: a warning band first, then the beam.
+  void _beam(Canvas c, GlassBeam b, double t) {
+    final d = b.b - b.a;
+    final len = d.distance;
+    if (len < 1e-6) return;
+    Paint line(Color color, double width) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..strokeWidth = width
+      ..color = color;
+    const pink = Color(0xFFFF4FD8);
+    final w = b.halfWidth * 2;
+    if (!b.burning) {
+      final k = b.age / GlassBeam.warning;
+      final on = sin(t * (10 + 14 * k)) > 0;
+      c.drawLine(b.a, b.b, line(pink.withValues(alpha: 0.08 + 0.1 * k), w));
+      c.drawLine(b.a, b.b, line(pink.withValues(alpha: on ? 0.9 : 0.3), 0.05));
+    } else {
+      final fade = (1 - (b.age - GlassBeam.warning) / GlassBeam.burn).clamp(0.0, 1.0);
+      final grow = min(1.0, (b.age - GlassBeam.warning) / 0.06);
+      c.drawLine(b.a, b.b, line(pink.withValues(alpha: 0.3 * fade), w * grow));
+      c.drawLine(b.a, b.b, line(pink.withValues(alpha: 0.9 * fade), 0.2 * grow));
+      c.drawLine(b.a, b.b, line(Colors.white.withValues(alpha: fade), 0.07 * grow));
+    }
+    for (final e in [b.a, b.b]) {
+      c.drawCircle(e, 0.12, Paint()..color = Palette.ink);
+      c.drawCircle(e, 0.085, Paint()..color = b.burning ? pink : const Color(0xFF7A3A6A));
+    }
   }
 
   /// A laser across the corridor: emitters in the walls, a thin blinking line

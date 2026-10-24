@@ -2,7 +2,7 @@ import 'dart:math';
 
 /// The material the ball is made of. Each one trades something for something
 /// else; the numbers are multipliers on the standard (wooden) ball.
-enum BallKind { wood, steel, rubber, glass, stone, slime }
+enum BallKind { wood, steel, rubber, glass, stone, slime, paper }
 
 class BallStats {
   const BallStats({
@@ -92,6 +92,18 @@ BallStats statsOf(BallKind kind) => switch (kind) {
           windResist: 0.35,
           bogResist: -0.4,
           stick: 2.5,
+        ),
+      // Light and almost silent, but it stops quickly, a gust carries it off
+      // and damp ground ruins it.
+      BallKind.paper => const BallStats(
+          accel: 1.15,
+          maxSpeed: 0.9,
+          damping: 1.35,
+          bounce: 0.05,
+          radius: 0.9,
+          noise: 0.3,
+          windResist: -0.6,
+          bogResist: -0.6,
         ),
     };
 

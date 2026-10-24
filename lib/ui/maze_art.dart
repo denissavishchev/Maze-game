@@ -101,6 +101,16 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
           c.drawCircle(polar(r + 0.12, a + 0.05 / (r + 0.12)), 0.03, dark);
         }
       }
+    case FloorStyle.ice:
+      // Frosted glass plates: rings and seams, with glints of light.
+      for (var r = 1.0; r < R; r += 1.0) {
+        c.drawArc(Rect.fromCircle(center: Offset.zero, radius: r), 0, kTwoPi, false, line);
+        final count = max(6, (kTwoPi * (r + 0.5) / 1.0).round());
+        for (var k = 0; k < count; k++) {
+          c.drawLine(polar(r, k * kTwoPi / count), polar(min(r + 1.0, R), k * kTwoPi / count), line);
+        }
+      }
+      _glints(c, rnd, (R * R * 1.6).round(), () => polar(sqrt(rnd.nextDouble()) * (R - 0.3), rnd.nextDouble() * kTwoPi));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rings.
       var ring = 0;
@@ -121,6 +131,21 @@ void _floor(Canvas c, PolarMaze m, WorldTheme t, Random rnd) {
         }
         ring++;
       }
+  }
+}
+
+/// Little four-point sparks of light scattered over a glass floor.
+void _glints(Canvas c, Random rnd, int count, Offset Function() spot) {
+  final paint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = 0.03
+    ..color = Colors.white.withValues(alpha: 0.85);
+  for (var i = 0; i < count; i++) {
+    final p = spot();
+    final s = 0.05 + rnd.nextDouble() * 0.08;
+    c.drawLine(p.translate(-s, 0), p.translate(s, 0), paint);
+    c.drawLine(p.translate(0, -s), p.translate(0, s), paint);
   }
 }
 
@@ -165,6 +190,7 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
       WallStyle.brick => 0.34,
       WallStyle.castle => 0.5,
       WallStyle.hull => 0.3,
+      WallStyle.glass => 0.26,
     };
     var k = 0;
     for (var d = 0.0; d < metric.length; d += step, k++) {
@@ -202,6 +228,15 @@ void _walls(Canvas c, Maze m, WorldTheme t, Random rnd) {
         case WallStyle.castle:
           c.drawLine(tan.position + normal * 0.11, tan.position - normal * 0.11, joint);
           c.drawCircle(tan.position + normal * side * 0.4, 0.025, shade);
+        case WallStyle.glass:
+          // A slanted streak of light across the pane, now and then a glint.
+          if (k % 2 == 0) {
+            c.drawLine(tan.position + normal * 0.09 + tan.vector * 0.05,
+                tan.position - normal * 0.09 - tan.vector * 0.05,
+                light.withAlpha(120)..strokeWidth = 0.035);
+          } else if (rnd.nextDouble() < 0.4) {
+            c.drawCircle(tan.position + normal * side * 0.3, 0.02 + rnd.nextDouble() * 0.02, light);
+          }
         case WallStyle.hull:
           // Panel seams across the wall and a rivet between them.
           if (k % 3 == 0) {
@@ -500,6 +535,34 @@ void _scenery(Canvas c, WorldTheme t, Random rnd, _Spot spot) {
           );
         }
       }
+    case Scenery.prisms:
+      // Pale crystals, drifting bubbles and sparks of light.
+      for (var i = 0; i < 40; i++) {
+        final p = spot(1.9, 10);
+        for (var k = 0; k < 3; k++) {
+          _crystal(
+            c,
+            p + Offset((k - 1) * 0.4, k == 1 ? -0.15 : 0.1),
+            0.3 + rnd.nextDouble() * 0.3 + (k == 1 ? 0.15 : 0),
+            rnd.nextBool() ? const Color(0xFF8ED6F2) : const Color(0xFFC9B8F5),
+            Colors.white,
+          );
+        }
+      }
+      for (var i = 0; i < 70; i++) {
+        final p = spot(1.9, 10);
+        final r = 0.12 + rnd.nextDouble() * 0.25;
+        c.drawCircle(p, r, Paint()..color = Colors.white.withValues(alpha: 0.1));
+        c.drawCircle(
+          p,
+          r,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.04
+            ..color = Colors.white.withValues(alpha: 0.5),
+        );
+        c.drawCircle(p.translate(-r * 0.35, -r * 0.35), r * 0.18, Paint()..color = Colors.white.withValues(alpha: 0.8));
+      }
     case Scenery.graveyard:
       // Headstones, crosses, dead trees and wisps of mist under the moon.
       for (var i = 0; i < 30; i++) {
@@ -708,6 +771,23 @@ void _rectFloor(Canvas c, Rect bounds, WorldTheme t, Random rnd) {
           }
         }
       }
+    case FloorStyle.ice:
+      // Frosted glass plates, each a little lighter or darker, with glints.
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          c.drawRect(
+            Rect.fromLTWH(x.toDouble(), y.toDouble(), 1, 1),
+            Paint()..color = (rnd.nextBool() ? Colors.white : t.floorDark).withValues(alpha: 0.12),
+          );
+        }
+      }
+      for (var y = 0.0; y <= h; y += 1.0) {
+        c.drawLine(Offset(0, y), Offset(w, y), line);
+      }
+      for (var x = 0.0; x <= w; x += 1.0) {
+        c.drawLine(Offset(x, 0), Offset(x, h), line);
+      }
+      _glints(c, rnd, (w * h * 1.6).round(), () => Offset(0.2 + rnd.nextDouble() * (w - 0.4), 0.2 + rnd.nextDouble() * (h - 0.4)));
     case FloorStyle.cobble:
       // Round cobbles laid in staggered rows.
       var row = 0;

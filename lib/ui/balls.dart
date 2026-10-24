@@ -142,6 +142,25 @@ _Marks _marksOf(BallKind kind) => _marksCache.putIfAbsent(kind, () {
                 0.05 + rnd.nextDouble() * 0.09,
               ),
           ]);
+        case BallKind.paper:
+          // Creases of a crumpled sheet: short, crooked, in every direction.
+          return _Marks([
+            for (var k = 0; k < 9; k++)
+              () {
+                final a = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                    rnd.nextDouble() * 2 - 1);
+                final b = _unit(rnd.nextDouble() * 2 - 1, rnd.nextDouble() * 2 - 1,
+                    rnd.nextDouble() * 2 - 1);
+                return _Line([
+                  for (var i = 0; i <= 5; i++)
+                    _unit(
+                      a[0] + (b[0] - a[0]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
+                      a[1] + (b[1] - a[1]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
+                      a[2] + (b[2] - a[2]) * i / 5 * 0.7 + (rnd.nextDouble() - 0.5) * 0.12,
+                    ),
+                ], const Color(0xFF8A8576).withValues(alpha: 0.55), 0.05);
+              }(),
+          ], const []);
         case BallKind.stone:
           final crack = [
             for (var i = 0; i <= 14; i++)
@@ -200,6 +219,9 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
     case BallKind.stone:
       c.drawCircle(p, r,
           sphere(const [Color(0xFFC4C4BB), Color(0xFF7D7D75), Color(0xFF3C3C37)], const [0, 0.55, 1]));
+    case BallKind.paper:
+      c.drawCircle(p, r,
+          sphere(const [Color(0xFFFFFFFF), Color(0xFFF1EDDF), Color(0xFFB5AF9B)], const [0, 0.55, 1]));
     case BallKind.slime:
       // Glossy green gel: see-through at the middle, deeper at the edge.
       c.drawCircle(p, r, Paint()..color = const Color(0xFF3DDC5A).withValues(alpha: 0.5));
@@ -264,7 +286,7 @@ void paintBall(Canvas c, Offset p, double r, BallKind kind, [Rot? rot]) {
   c.drawCircle(
     light,
     r * 0.18,
-    Paint()..color = Colors.white.withValues(alpha: kind == BallKind.stone ? 0.35 : 0.8),
+    Paint()..color = Colors.white.withValues(alpha: kind == BallKind.stone ? 0.35 : kind == BallKind.paper ? 0.55 : 0.8),
   );
 }
 

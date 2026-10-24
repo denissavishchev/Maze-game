@@ -1,7 +1,7 @@
 import '../l10n/strings.dart';
 import 'ball.dart';
 
-enum WorldKind { forest, mud, mountains, underground, city, space, graveyard }
+enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass }
 
 /// A chosen world and one of five levels. The level sets everything that
 /// makes the game harder: maze size, number of buttons (and gates), number of
@@ -87,6 +87,16 @@ class GameConfig {
 
   /// Spaceship: seconds between changes of the gravity's direction.
   double get gravityInterval => _pick(const [7.0, 6.5, 6.0, 5.5, 5.0]);
+
+  /// Glass: mirrors in the walls that throw the ball to a random place.
+  int get mirrorCount => _pick(const [2, 2, 3, 3, 4]);
+
+  /// Glass: seconds standing on one spot before the floor gives way.
+  double get crumbleSeconds => _pick(const [5.5, 5.0, 4.5, 4.0, 3.5]);
+
+  /// Glass: seconds between one laser and the next, and how many at once.
+  double get beamInterval => _pick(const [5.0, 4.5, 4.0, 3.5, 3.0]);
+  int get beamCount => _pick(const [1, 1, 1, 2, 2]);
 
   /// Underground: how far the ball lights the way.
   double get lightRadius => _pick(const [3.6, 3.2, 2.9, 2.6, 2.3]);

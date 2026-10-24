@@ -15,6 +15,7 @@ Sound impactOf(BallKind k) => switch (k) {
       BallKind.glass => Sound.impactGlass,
       BallKind.stone => Sound.impactStone,
       BallKind.slime => Sound.impactSlime,
+      BallKind.paper => Sound.impactPaper,
     };
 
 /// Drives the ball into a stretch of closed outer wall at [speed].

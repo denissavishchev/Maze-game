@@ -110,6 +110,46 @@ class SecurityCamera {
   double alert = 0;
 }
 
+/// Glass: a mirror set into a wall. Touch it and it throws the ball to a
+/// random place in the maze.
+class Mirror {
+  Mirror(this.seg);
+
+  final Seg seg;
+  Offset get center => (seg.a + seg.b) / 2;
+
+  /// 1 right after it was used, fading to 0.
+  double flash = 0;
+}
+
+/// Glass: a spot of floor that crumbles while the ball stands on it. [level]
+/// runs from 0 (whole) to 1 (gone); [stage] is the cracking seen in 4 steps.
+class Crumble {
+  Crumble(this.pos);
+
+  final Offset pos;
+  double level = 0;
+
+  int get stage => min(4, (level * 4).floor());
+}
+
+/// Glass: a laser that cuts the whole maze along one row, column or chord,
+/// first as a warning, then as a burning beam. [halfWidth] is how far from the
+/// line it reaches.
+class GlassBeam {
+  GlassBeam(this.a, this.b, this.halfWidth);
+
+  static const double warning = 1.3;
+  static const double burn = 0.5;
+
+  final Offset a;
+  final Offset b;
+  final double halfWidth;
+  double age = 0;
+
+  bool get burning => age >= warning;
+}
+
 class MudPatch {
   const MudPatch(this.pos, this.radius);
 
@@ -325,6 +365,18 @@ class GameController extends ChangeNotifier {
   List<MudPatch> fog = [];
   List<Burst> bursts = [];
 
+  /// Glass: mirrors in the walls, crumbling floor and the laser beams.
+  List<Mirror> mirrors = [];
+  List<Crumble> cracks = [];
+  List<GlassBeam> beams = [];
+  double _beamTimer = 3;
+  double _mirrorCooldown = 0;
+  bool _beamNoticed = false;
+
+  /// Glass: slower than this and the floor starts to crumble.
+  static const double crumbleSpeed = 0.9;
+  static const double crumbleRadius = 0.45;
+
   /// Gate to point the player at after a button was pressed (-1 = none).
   int hintGate = -1;
   double hintLeft = 0;
@@ -468,6 +520,8 @@ class GameController extends ChangeNotifier {
     airlocks = [];
     cameras = [];
     if (config.world == WorldKind.space) _placeSpaceHazards();
+    mirrors = [];
+    if (config.world == WorldKind.glass) _placeMirrors();
     restart();
   }
 
@@ -526,6 +580,38 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Glass: mirrors on walls beside corridor cells, spread out and away from
+  /// the start.
+  void _placeMirrors() {
+    final special = {maze.start, maze.goal, ...maze.buttonCells};
+    final start = maze.cellCenter(maze.start);
+    final cells = [
+      for (var c = 1; c < maze.cellCount; c++)
+        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 2.5) c,
+    ]..shuffle(_rnd);
+    for (final c in cells) {
+      if (mirrors.length >= config.mirrorCount) break;
+      final at = maze.cellCenter(c);
+      final walls = [
+        for (final s in maze.segmentsNear(at))
+          if (s.gate < 0 && (s.b - s.a).distance > 0.4 && _distToSeg(at, s) < 0.9) s,
+      ];
+      if (walls.isEmpty) continue;
+      final seg = walls[_rnd.nextInt(walls.length)];
+      final mid = (seg.a + seg.b) / 2;
+      if (mirrors.any((m) => (m.center - mid).distance < 2.5)) continue;
+      mirrors.add(Mirror(seg));
+    }
+  }
+
+  static double _distToSeg(Offset p, Seg s) {
+    final ab = s.b - s.a;
+    final t = (((p - s.a).dx * ab.dx + (p - s.a).dy * ab.dy) /
+            (ab.dx * ab.dx + ab.dy * ab.dy))
+        .clamp(0.0, 1.0);
+    return (p - (s.a + ab * t)).distance;
+  }
+
   /// Same maze, everything back to its starting state.
   void restart() {
     gateOpen = List<bool>.filled(maze.gateCount, false);
@@ -559,6 +645,14 @@ class GameController extends ChangeNotifier {
     windLeft = 0;
     _windTimer = 7;
     _spaceClock = 0;
+    cracks = [];
+    beams = [];
+    _beamTimer = config.beamInterval;
+    _mirrorCooldown = 0;
+    _beamNoticed = false;
+    for (final m in mirrors) {
+      m.flash = 0;
+    }
     for (final cam in cameras) {
       cam.alert = 0;
     }
@@ -761,6 +855,7 @@ class GameController extends ChangeNotifier {
         BallKind.glass => Sound.impactGlass,
         BallKind.stone => Sound.impactStone,
         BallKind.slime => Sound.impactSlime,
+        BallKind.paper => Sound.impactPaper,
       },
       volume: 0.15 + 0.85 * strength,
     );
@@ -1097,7 +1192,8 @@ class GameController extends ChangeNotifier {
         }
       case WorldKind.underground:
       case WorldKind.space:
-        break; // the light and the stabilizer work through [bonusLeft]
+      case WorldKind.glass:
+        break; // the light, the stabilizer and the prism work through [bonusLeft]
     }
     notifyListeners();
   }
@@ -1346,6 +1442,8 @@ class GameController extends ChangeNotifier {
             d.route.clear();
           }
         }
+      case WorldKind.glass:
+        _updateGlass(dt);
       case WorldKind.graveyard:
         for (final g in creatures) {
           if (g.lockLeft > 0) {
@@ -1435,6 +1533,133 @@ class GameController extends ChangeNotifier {
           _spawnHazard(i);
         }
       }
+    }
+  }
+
+  // ---- glass ------------------------------------------------------------
+
+  void _updateGlass(double dt) {
+    final shielded = bonusLeft > 0;
+    _mirrorCooldown -= dt;
+    for (final m in mirrors) {
+      m.flash = max(0, m.flash - dt * 2);
+    }
+    if (!shielded && _mirrorCooldown <= 0) {
+      final reach = ballRadius + PolarMaze.wallHalf + 0.07;
+      for (final m in mirrors) {
+        if (_distToSeg(pos, m.seg) < reach) {
+          _teleport(m);
+          break;
+        }
+      }
+    }
+    _crumble(dt, shielded);
+    _updateBeams(dt, shielded);
+  }
+
+  /// A mirror throws the ball to a random cell, not too near and never the
+  /// exit.
+  void _teleport(Mirror m) {
+    final far = [
+      for (var c = 0; c < maze.cellCount; c++)
+        if (c != maze.goal &&
+            (maze.cellCenter(c) - pos).distance > 3 &&
+            mirrors.every((o) => (o.center - maze.cellCenter(c)).distance > 1.2))
+          c,
+    ];
+    final cells = far.isNotEmpty
+        ? far
+        : [for (var c = 0; c < maze.cellCount; c++) if (c != maze.goal) c];
+    final to = maze.cellCenter(cells[_rnd.nextInt(cells.length)]);
+    m.flash = 1;
+    bursts.add(Burst(pos, 2));
+    pos = to;
+    vel = Offset.zero;
+    camera = to;
+    bursts.add(Burst(to, 2));
+    _mirrorCooldown = 1.5;
+    cracks.clear();
+    notice = 'notice.mirror';
+    noticeArgs = const {};
+    noticeLeft = 1.8;
+    _explore();
+  }
+
+  /// The floor gives way under a ball that dawdles: four stages of cracking
+  /// and then it falls through. Cracks mend slowly once the ball moves on.
+  void _crumble(double dt, bool shielded) {
+    final slow = !shielded && vel.distance < crumbleSpeed;
+    Crumble? under;
+    for (final k in cracks) {
+      if ((k.pos - pos).distance < crumbleRadius) {
+        under = k;
+        break;
+      }
+    }
+    if (under == null && slow) {
+      under = Crumble(pos);
+      cracks.add(under);
+      if (cracks.length > 24) cracks.removeAt(0);
+    }
+    for (final k in cracks) {
+      if (identical(k, under) && slow) {
+        k.level += dt / config.crumbleSeconds;
+      } else {
+        k.level -= dt * 0.35;
+      }
+    }
+    cracks.removeWhere((k) => k.level <= 0 && !identical(k, under));
+    if (under != null && under.level >= 1) _lose('lose.floor');
+  }
+
+  void _updateBeams(double dt, bool shielded) {
+    for (final b in beams) {
+      b.age += dt;
+    }
+    beams.removeWhere((b) => b.age > GlassBeam.warning + GlassBeam.burn);
+    _beamTimer -= dt;
+    if (_beamTimer <= 0 && !shielded && beams.length < config.beamCount) {
+      _beamTimer = config.beamInterval * (0.7 + 0.6 * _rnd.nextDouble());
+      _spawnBeam();
+    }
+    if (shielded) return;
+    for (final b in beams) {
+      if (!b.burning) continue;
+      final d = b.b - b.a;
+      final off = ((pos - b.a).dx * d.dy - (pos - b.a).dy * d.dx).abs() / d.distance;
+      if (off < b.halfWidth + ballRadius * 0.3) {
+        _lose('lose.laser');
+        break;
+      }
+    }
+  }
+
+  /// A laser along a random row or column (rectangular maze), or a random
+  /// chord from edge to edge (round maze).
+  void _spawnBeam() {
+    final m = maze;
+    if (m is RectMaze) {
+      if (_rnd.nextBool()) {
+        final y = _rnd.nextInt(m.rows) + 0.5;
+        beams.add(GlassBeam(Offset(-0.6, y), Offset(m.cols + 0.6, y), 0.42));
+      } else {
+        final x = _rnd.nextInt(m.cols) + 0.5;
+        beams.add(GlassBeam(Offset(x, -0.6), Offset(x, m.rows + 0.6), 0.42));
+      }
+    } else {
+      final r = m.radius + 0.4;
+      final phi = _rnd.nextDouble() * pi;
+      final o = (_rnd.nextDouble() * 2 - 1) * m.radius * 0.7;
+      final d = Offset(cos(phi), sin(phi));
+      final n = Offset(-d.dy, d.dx);
+      final h = sqrt(r * r - o * o);
+      beams.add(GlassBeam(n * o - d * h, n * o + d * h, 0.38));
+    }
+    if (!_beamNoticed) {
+      _beamNoticed = true;
+      notice = 'notice.beam';
+      noticeArgs = const {};
+      noticeLeft = 1.5;
     }
   }
 
