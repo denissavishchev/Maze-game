@@ -205,6 +205,8 @@ const _tables = <AppLang, Map<String, String>>{
     'end.new_maze': 'Nowy labirynt',
     'end.records': 'Rekordy',
     'records.empty': 'Brak wyników. Przejdź labirynt!',
+    'records.endless': 'BEZ KOŃCA',
+    'records.mazes': '{n} lab.',
   },
   AppLang.en: {
     'cal.label': 'Calibrate',
@@ -337,6 +339,8 @@ const _tables = <AppLang, Map<String, String>>{
     'end.new_maze': 'New maze',
     'end.records': 'Records',
     'records.empty': 'No results yet. Solve a maze!',
+    'records.endless': 'ENDLESS',
+    'records.mazes': '{n} mazes',
   },
   AppLang.ru: {
     'cal.label': 'Калибровка',
@@ -469,5 +473,7 @@ const _tables = <AppLang, Map<String, String>>{
     'end.new_maze': 'Новый лабиринт',
     'end.records': 'Рекорды',
     'records.empty': 'Пока нет результатов. Пройди лабиринт!',
+    'records.endless': 'БЕЗ КОНЦА',
+    'records.mazes': '{n} лаб.',
   },
 };

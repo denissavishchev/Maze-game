@@ -34,9 +34,12 @@ class _RecordsSheetState extends State<_RecordsSheet> {
   late WorldKind world = widget.config.world;
   late int level = widget.config.level;
   late Future<List<RecordEntry>> future = RecordStore.load(world, level);
+  final Future<List<EndlessRecord>> endlessFuture = EndlessRecordStore.load();
+  bool endless = false;
 
   void _select({WorldKind? w, int? l}) {
     setState(() {
+      endless = false;
       world = w ?? world;
       level = l ?? level;
       future = RecordStore.load(world, level);
@@ -67,15 +70,21 @@ class _RecordsSheetState extends State<_RecordsSheet> {
               Wrap(
                 spacing: 6,
                 children: [
+                  ChoiceChip(
+                    label: Text(tr('records.endless')),
+                    selected: endless,
+                    onSelected: (_) => setState(() => endless = true),
+                  ),
                   for (final w in WorldKind.values)
                     ChoiceChip(
                       label: Text(themeFor(w).name),
-                      selected: w == world,
+                      selected: !endless && w == world,
                       onSelected: (_) => _select(w: w),
                     ),
                 ],
               ),
-              Wrap(
+              if (!endless)
+                Wrap(
                 spacing: 6,
                 children: [
                   for (var l = GameConfig.minLevel; l <= GameConfig.maxLevel; l++)
@@ -102,7 +111,7 @@ class _RecordsSheetState extends State<_RecordsSheet> {
               ),
               const SizedBox(height: 8),
               Flexible(
-                child: FutureBuilder<List<RecordEntry>>(
+                child: endless ? _endlessList() : FutureBuilder<List<RecordEntry>>(
                   future: future,
                   builder: (context, snap) {
                     if (!snap.hasData) {
@@ -121,7 +130,8 @@ class _RecordsSheetState extends State<_RecordsSheet> {
                     return ListView.builder(
                       shrinkWrap: true,
                       itemCount: list.length > 10 ? 10 : list.length,
-                      itemBuilder: (_, i) => _row(i + 1, list[i]),
+                      itemBuilder: (_, i) =>
+                          _row(i + 1, list[i].millis, list[i].playedAt),
                     );
                   },
                 ),
@@ -133,8 +143,38 @@ class _RecordsSheetState extends State<_RecordsSheet> {
     );
   }
 
-  Widget _row(int place, RecordEntry e) {
-    final d = e.playedAt;
+  Widget _endlessList() {
+    return FutureBuilder<List<EndlessRecord>>(
+      future: endlessFuture,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: CircularProgressIndicator(color: Palette.gold),
+          );
+        }
+        final list = snap.data!;
+        if (list.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(tr('records.empty')),
+          );
+        }
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: list.length > 10 ? 10 : list.length,
+          itemBuilder: (_, i) => _row(
+            i + 1,
+            list[i].millis,
+            list[i].playedAt,
+            label: tr('records.mazes', {'n': list[i].mazes}),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _row(int place, int millis, DateTime d, {String? label}) {
     final date =
         '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}';
     return Container(
@@ -154,9 +194,15 @@ class _RecordsSheetState extends State<_RecordsSheet> {
                     fontWeight: FontWeight.w800,
                     color: place == 1 ? Palette.gold : Colors.white70)),
           ),
+          if (label != null) ...[
+            const Icon(Icons.flag_rounded, size: 16, color: Palette.gold),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(width: 12),
+          ],
           const Icon(Icons.timer_outlined, size: 16, color: Colors.white70),
           const SizedBox(width: 4),
-          Expanded(child: Text(formatTime(e.millis / 1000))),
+          Expanded(child: Text(formatTime(millis / 1000))),
           Text(date, style: const TextStyle(color: Colors.white54)),
         ],
       ),

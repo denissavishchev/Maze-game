@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../game/game_controller.dart';
 import '../game/tilt.dart';
@@ -63,10 +64,13 @@ class _GameScreenState extends State<GameScreen>
       );
     } catch (_) {}
     _ticker = createTicker(_tick)..start();
+    // Tilting never touches the screen, so keep it from dimming and locking.
+    WakelockPlus.enable().catchError((_) {});
   }
 
   @override
   void dispose() {
+    WakelockPlus.disable().catchError((_) {});
     _ticker.dispose();
     _sensor?.cancel();
     game.dispose();
@@ -109,6 +113,16 @@ class _GameScreenState extends State<GameScreen>
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                   child: _Header(game: game, onCalibrate: _calibrate),
                 ),
+                // Endless mode gives the world's indicator a strip of its own,
+                // so it never covers the maze.
+                if (game.endless)
+                  SizedBox(
+                    height: _stripHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Align(child: _worldBadge() ?? const SizedBox.shrink()),
+                    ),
+                  ),
                 Expanded(
                   child: LayoutBuilder(builder: (context, box) {
                     if (game.endless) _fitMaze(box.biggest);
@@ -147,29 +161,12 @@ class _GameScreenState extends State<GameScreen>
                             bottom: 215,
                             child: _Hint(haveSensor: _haveSensor),
                           ),
-                        if (game.config.world == WorldKind.forest ||
-                            game.config.world == WorldKind.graveyard ||
-                            game.config.world == WorldKind.city)
+                        if (!game.endless && _worldBadge() != null)
                           Positioned(
                             left: 12,
                             right: 12,
                             top: 8,
-                            child: _NoiseMeter(game: game),
-                          ),
-                        if (game.config.world == WorldKind.mountains &&
-                            (game.windLeft > 0 || game.windWarnLeft > 0))
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            top: 8,
-                            child: _WindBadge(game: game),
-                          ),
-                        if (game.config.world == WorldKind.space)
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            top: 8,
-                            child: _GravityBadge(game: game),
+                            child: _worldBadge()!,
                           ),
                         if (game.noticeLeft > 0)
                           Positioned(
@@ -190,6 +187,26 @@ class _GameScreenState extends State<GameScreen>
         ),
       ),
     );
+  }
+
+  static const double _stripHeight = 44;
+
+  /// The indicator the current world needs: noise, wind or gravity.
+  Widget? _worldBadge() {
+    switch (game.config.world) {
+      case WorldKind.forest:
+      case WorldKind.graveyard:
+      case WorldKind.city:
+        return _NoiseMeter(game: game);
+      case WorldKind.mountains:
+        return game.windLeft > 0 || game.windWarnLeft > 0
+            ? _WindBadge(game: game)
+            : null;
+      case WorldKind.space:
+        return _GravityBadge(game: game);
+      default:
+        return null;
+    }
   }
 
   /// Endless mode: the maze is as many cells across and down as fill the room
@@ -561,7 +578,12 @@ class _Header extends StatelessWidget {
                   const Icon(Icons.timer_outlined, size: 20, color: Palette.cream),
                   const SizedBox(width: 6),
                   Text(formatTime(game.elapsed), style: stat),
-                  if (!game.endless) ...[
+                  if (game.endless) ...[
+                    const SizedBox(width: 20),
+                    const Icon(Icons.flag_rounded, size: 20, color: Palette.gold),
+                    const SizedBox(width: 6),
+                    Text('${game.stage}', style: stat),
+                  ] else ...[
                     const SizedBox(width: 20),
                     const Icon(Icons.radio_button_checked_rounded,
                         size: 20, color: Palette.gold),
@@ -649,7 +671,7 @@ class _EndCard extends StatelessWidget {
                   style: const TextStyle(
                       color: Palette.gold, fontWeight: FontWeight.w700)),
             ],
-            if (won && game.recordRank > 0) ...[
+            if ((won || game.endless) && game.recordRank > 0) ...[
               const SizedBox(height: 4),
               Text(tr('end.rank', {'n': game.recordRank}),
                   style: const TextStyle(

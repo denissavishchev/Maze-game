@@ -227,9 +227,23 @@ void main() {
     expect(g.stage, 2);
     g.resetRun();
     expect(g.stage, 0);
-    expect(g.config.ball, BallKind.steel, reason: 'the chosen ball stays');
+    expect(g.config.world, isNotNull);
     expect(g.elapsed, 0);
     expect(g.scrolling, isFalse);
+  });
+
+  test('endless: the ball changes at random with each level', () {
+    final g = GameController(GameController.endlessConfig(0, BallKind.steel),
+        endless: true, seed: 5);
+    g.update(1 / 60, const Offset(1, 0));
+    final seen = <BallKind>{g.config.ball};
+    for (var i = 0; i < 12; i++) {
+      final before = g.config.ball;
+      finishMaze(g);
+      expect(g.config.ball, isNot(before), reason: 'never the same ball twice');
+      seen.add(g.config.ball);
+    }
+    expect(seen.length, greaterThan(2));
   });
 
   test('a single level still ends when the centre is reached', () {
@@ -285,8 +299,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         expect(find.text(tr('endless.title')), findsOneWidget);
         expect(find.text(tr('endless.desc')), findsOneWidget);
+        // Worlds and balls are only described: they come up at random.
         expect(find.text(tr('sel.ball')), findsOneWidget);
-        expect(find.text(tr('sel.world')), findsNothing);
+        expect(find.text(tr('sel.world')), findsOneWidget);
+        expect(find.byType(ChoiceChip), findsNothing);
         expect(find.text(tr('sel.size')), findsNothing);
         expect(find.text(tr('play')), findsOneWidget);
         expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
@@ -322,11 +338,11 @@ void main() {
     ]) {
       expect(find.byIcon(icon), findsNothing, reason: 'no bonus on the first five levels');
     }
-    // The maze starts right under the header.
+    // The maze starts under the header and the strip held for the indicator.
     final painter = find.byWidgetPredicate((w) => w is CustomPaint && w.painter != null).last;
     final top = tester.getTopLeft(painter).dy;
     final cal = tester.getBottomLeft(find.byIcon(Icons.screen_rotation_alt_rounded)).dy;
-    expect(top - cal, lessThan(30), reason: 'nothing between the header and the maze');
+    expect(top - cal, lessThan(80), reason: 'only the indicator strip between them');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -346,3 +362,4 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 }
+

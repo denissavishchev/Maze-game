@@ -132,7 +132,7 @@ class GameController extends ChangeNotifier {
   GameController(this.config,
       {this.hazardsEnabled = true, this.endless = false, int? seed})
       : _rnd = seed == null ? Random() : Random(seed) {
-    if (endless) config = endlessConfig(0, config.ball, world: _pickWorld());
+    if (endless) config = endlessConfig(0, _pickBall(), world: _pickWorld());
     newMaze();
   }
 
@@ -146,6 +146,15 @@ class GameController extends ChangeNotifier {
         ball: ball,
         bonuses: (stage ~/ levelsPerBonusRound).isOdd ? 1 : 0,
       );
+
+  /// Endless mode: a random ball, never the one just played.
+  BallKind _pickBall() {
+    final others = [
+      for (final b in BallKind.values)
+        if (b != config.ball) b,
+    ];
+    return others[_rnd.nextInt(others.length)];
+  }
 
   /// Endless mode: this many levels without bonuses, then this many with one
   /// each, and so on.
@@ -283,8 +292,8 @@ class GameController extends ChangeNotifier {
   int stage = 0;
 
   /// What the chosen ball is made of, and its radius.
-  late final BallStats ball = statsOf(config.ball);
-  late final double ballRadius = baseBallRadius * ball.radius;
+  BallStats get ball => statsOf(config.ball);
+  double get ballRadius => baseBallRadius * ball.radius;
 
   /// Tests switch hazards off so an autopilot cannot be killed.
   final bool hazardsEnabled;
@@ -669,7 +678,7 @@ class GameController extends ChangeNotifier {
     final carried = elapsed;
     final left = maze;
     stage++;
-    config = endlessConfig(stage, config.ball, world: _pickWorld());
+    config = endlessConfig(stage, _pickBall(), world: _pickWorld());
     // The next maze starts right below the exit of this one.
     _nextStartCol = left is RectMaze ? left.goalCol : null;
     newMaze();
@@ -725,7 +734,7 @@ class GameController extends ChangeNotifier {
   void resetRun() {
     stage = 0;
     _recent.clear();
-    config = endlessConfig(0, config.ball, world: _pickWorld());
+    config = endlessConfig(0, _pickBall(), world: _pickWorld());
     newMaze();
     _announceStage();
   }
@@ -1118,6 +1127,18 @@ class GameController extends ChangeNotifier {
     status = GameStatus.lost;
     lostReason = reason;
     bursts.add(Burst(pos, 1));
+    if (endless && stage > 0) _saveEndlessRecord();
+  }
+
+  Future<void> _saveEndlessRecord() async {
+    final rank = await EndlessRecordStore.add(EndlessRecord(
+      mazes: stage,
+      millis: (elapsed * 1000).round(),
+      playedAt: DateTime.now(),
+    ));
+    if (_disposed) return;
+    recordRank = rank;
+    notifyListeners();
   }
 
   Future<void> _saveRecord() async {

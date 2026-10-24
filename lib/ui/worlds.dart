@@ -75,7 +75,7 @@ class WorldTheme {
 WorldTheme themeFor(WorldKind kind) => switch (kind) {
       WorldKind.forest => const WorldTheme(
           id: 'forest',
-          icon: Icons.park_rounded,
+          icon: Icons.forest_rounded,
           bg: Color(0xFF5BA83A),
           floor: Color(0xFFE8D6A0),
           floorDark: Color(0xFFCBB67E),
@@ -92,7 +92,7 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
         ),
       WorldKind.mud => const WorldTheme(
           id: 'mud',
-          icon: Icons.water_drop_rounded,
+          icon: Icons.grass_rounded,
           bg: Color(0xFF7D6B44),
           floor: Color(0xFFDCC995),
           floorDark: Color(0xFFBFA970),
@@ -109,7 +109,7 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
         ),
       WorldKind.mountains => const WorldTheme(
           id: 'mountains',
-          icon: Icons.terrain_rounded,
+          icon: Icons.filter_hdr_rounded,
           bg: Color(0xFFD6E5F1),
           floor: Color(0xFFD9C9A0),
           floorDark: Color(0xFFBBA980),
@@ -144,7 +144,7 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
         ),
       WorldKind.city => const WorldTheme(
           id: 'city',
-          icon: Icons.location_city_rounded,
+          icon: Icons.castle_rounded,
           bg: Color(0xFF6DB04A),
           floor: Color(0xFFC9BDA3),
           floorDark: Color(0xFFA89C82),
@@ -178,7 +178,7 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
         ),
       WorldKind.graveyard => const WorldTheme(
           id: 'graveyard',
-          icon: Icons.nightlight_round,
+          icon: Icons.church_rounded,
           bg: Color(0xFF1B2433),
           floor: Color(0xFF7A7C6E),
           floorDark: Color(0xFF5B5E52),

@@ -80,3 +80,64 @@ class RecordStore {
     return board.indexOf(entry) + 1;
   }
 }
+
+/// One finished endless run: the more mazes the better, then the faster.
+class EndlessRecord {
+  const EndlessRecord({
+    required this.mazes,
+    required this.millis,
+    required this.playedAt,
+  });
+
+  final int mazes;
+  final int millis;
+  final DateTime playedAt;
+
+  Map<String, Object> toJson() => {
+    'n': mazes,
+    't': millis,
+    'd': playedAt.millisecondsSinceEpoch,
+  };
+
+  static EndlessRecord fromJson(Map<String, dynamic> j) => EndlessRecord(
+    mazes: j['n'] as int,
+    millis: j['t'] as int,
+    playedAt: DateTime.fromMillisecondsSinceEpoch(j['d'] as int),
+  );
+}
+
+class EndlessRecordStore {
+  static const _key = 'endless_records_v1';
+  static const _keep = 20;
+
+  static int _best(EndlessRecord a, EndlessRecord b) => a.mazes != b.mazes
+      ? b.mazes.compareTo(a.mazes)
+      : a.millis.compareTo(b.millis);
+
+  static Future<List<EndlessRecord>> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw == null) return [];
+      return [
+        for (final j in jsonDecode(raw) as List)
+          EndlessRecord.fromJson(j as Map<String, dynamic>),
+      ]..sort(_best);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Saves [entry] and returns its 1-based rank.
+  static Future<int> add(EndlessRecord entry) async {
+    final all = [...await load(), entry]..sort(_best);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _key,
+        jsonEncode([for (final e in all.take(_keep)) e.toJson()]),
+      );
+    } catch (_) {}
+    return all.indexOf(entry) + 1;
+  }
+}
