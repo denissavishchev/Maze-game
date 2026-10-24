@@ -58,6 +58,8 @@ class _SelectScreenState extends State<SelectScreen> {
                     if (widget.endless) ...[
                       _endlessDescription(),
                       const SizedBox(height: 12),
+                      _buttons(),
+                      const SizedBox(height: 12),
                       _label(tr('sel.world')),
                       _infoList([for (final w in WorldKind.values) _worldInfo(w)]),
                       const SizedBox(height: 12),
@@ -79,37 +81,7 @@ class _SelectScreenState extends State<SelectScreen> {
                       _sizePicker(),
                       const SizedBox(height: 12),
                     ],
-                    // Back (left) and play (right) share one row at the bottom.
-                    Row(
-                      children: [
-                        ChunkyIconButton(
-                          icon: Icons.arrow_back_rounded,
-                          size: 62,
-                          tooltip: tr('tt.menu'),
-                          onTap: () => Navigator.of(context).pop(),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ChunkyButton(
-                            label: tr('play'),
-                            icon: Icons.play_arrow_rounded,
-                            tint: themeFor(world).accent,
-                            fontSize: 22,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => GameScreen(
-                                  config: widget.endless
-                                      ? GameController.endlessConfig(0, ball)
-                                      : config,
-                                  endless: widget.endless,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    if (!widget.endless) _buttons(),
                   ],
                 ),
               ),
@@ -119,6 +91,39 @@ class _SelectScreenState extends State<SelectScreen> {
       ),
     );
   }
+
+  /// Back (left) and play (right) share one row: at the bottom, or in endless
+  /// mode right under the description.
+  Widget _buttons() => Row(
+    children: [
+      ChunkyIconButton(
+        icon: Icons.arrow_back_rounded,
+        size: 62,
+        tooltip: tr('tt.menu'),
+        onTap: () => Navigator.of(context).pop(),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: ChunkyButton(
+          label: tr('play'),
+          icon: Icons.play_arrow_rounded,
+          tint: themeFor(world).accent,
+          fontSize: 22,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => GameScreen(
+                config: widget.endless
+                    ? GameController.endlessConfig(0, ball)
+                    : config,
+                endless: widget.endless,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
