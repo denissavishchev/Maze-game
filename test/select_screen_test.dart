@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/ui/kit.dart';
-import 'package:maze/ui/menu_screen.dart';
-import 'package:maze/ui/worlds.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/ui/kit.dart';
+import 'package:orbyrinth/ui/menu_screen.dart';
+import 'package:orbyrinth/ui/worlds.dart';
 
 void main() {
   testWidgets('selection screen never overflows, even with large fonts', (tester) async {

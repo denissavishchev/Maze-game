@@ -6,10 +6,16 @@ import 'package:flutter/scheduler.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../game/ball.dart';
+import '../game/ball_collection.dart';
 import '../game/game_controller.dart';
+import '../game/story.dart';
+import '../game/story_progress.dart';
 import '../game/tilt.dart';
 import '../game/world.dart';
 import '../l10n/strings.dart';
+import '../monetization/ad_service.dart';
+import 'balls.dart';
 import 'game_painter.dart';
 import 'kit.dart';
 import 'palette.dart';
@@ -17,9 +23,22 @@ import 'records_sheet.dart';
 import 'worlds.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.config, this.endless = false});
+  const GameScreen({
+    super.key,
+    required this.config,
+    this.endless = false,
+    this.story,
+    @visibleForTesting this.controller,
+  });
+
+  /// Tests: a ready-made controller to play instead of a new one.
+  final GameController? controller;
 
   final GameConfig config;
+
+  /// Story mode: the level being played. Winning earns stars, and "next
+  /// level" pops back to the map with the index of the following level.
+  final StoryLevel? story;
 
   /// Endless mode: [config] is the first stage, the worlds then follow on.
   final bool endless;
@@ -31,7 +50,9 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
   late final GameController game =
-      GameController(widget.config, endless: widget.endless);
+      widget.controller ??
+      GameController(widget.config,
+          endless: widget.endless, ballPool: BallCollection.instance.owned);
 
   /// In endless mode the world, and so the look, changes from stage to stage.
   WorldTheme get theme => themeFor(game.config.world);
@@ -44,6 +65,17 @@ class _GameScreenState extends State<GameScreen>
   StreamSubscription<AccelerometerEvent>? _sensor;
   final TiltTracker _tilt = TiltTracker();
   Duration _last = Duration.zero;
+
+  GameStatus? _seen;
+
+  /// An ad is on screen: the game stands still behind it.
+  bool _paused = false;
+
+  /// Story mode: stars earned by the run just won.
+  int _stars = 0;
+
+  /// Balls this win has just given.
+  List<BallKind> _newBalls = const [];
 
   bool get _haveSensor => _tilt.hasSensor;
 
@@ -63,6 +95,7 @@ class _GameScreenState extends State<GameScreen>
         cancelOnError: true,
       );
     } catch (_) {}
+    game.addListener(_onGame);
     _ticker = createTicker(_tick)..start();
     // Tilting never touches the screen, so keep it from dimming and locking.
     WakelockPlus.enable().catchError((_) {});
@@ -73,6 +106,7 @@ class _GameScreenState extends State<GameScreen>
     WakelockPlus.disable().catchError((_) {});
     _ticker.dispose();
     _sensor?.cancel();
+    game.removeListener(_onGame);
     game.dispose();
     super.dispose();
   }
@@ -80,7 +114,7 @@ class _GameScreenState extends State<GameScreen>
   void _tick(Duration elapsed) {
     final dt = (elapsed - _last).inMicroseconds / 1e6;
     _last = elapsed;
-    if (dt <= 0) return;
+    if (dt <= 0 || _paused) return;
 
     game.update(dt, _tilt.tilt);
     // The reference pose follows the hand until the first real tilt, so
@@ -89,6 +123,53 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _calibrate() => setState(_tilt.calibrate);
+
+  /// Counts a finished level for the ads and, in story mode, scores a win.
+  void _onGame() {
+    final status = game.status;
+    if (status == _seen) return;
+    _seen = status;
+    if (status == GameStatus.playing) {
+      if (_newBalls.isNotEmpty) _newBalls = const [];
+      return;
+    }
+    AdGate.instance.levelFinished();
+    final story = widget.story;
+    if (status == GameStatus.won && story != null) {
+      final stars = story.starsFor(game.elapsed, game.config.ball);
+      _stars = stars;
+      StoryProgress.instance
+          .record(story.index, stars, (game.elapsed * 1000).round())
+          .then((_) => BallCollection.instance.grantRewards(StoryProgress.instance))
+          .then((fresh) {
+        if (fresh.isNotEmpty && mounted && game.won) setState(() => _newBalls = fresh);
+      });
+    }
+  }
+
+  /// Shows the interstitial if one is due, then goes on with [action].
+  Future<void> _afterAd(VoidCallback action, {bool always = false}) async {
+    _paused = true;
+    await (always
+        ? AdService.interstitialAlways(context)
+        : AdService.interstitialIfDue(context));
+    _paused = false;
+    if (mounted) action();
+  }
+
+  /// Runs [reward] if the player watched a rewarded ad to the end.
+  Future<void> _rewardedAd(VoidCallback reward) async {
+    _paused = true;
+    final earned = await AdService.rewarded(context);
+    _paused = false;
+    if (earned && mounted) reward();
+  }
+
+  Future<void> _continueWithAd() => _rewardedAd(game.continueAfterLoss);
+
+  Future<void> _bonusWithAd() => _rewardedAd(game.grantBonusCharge);
+
+  Future<void> _returnWithAd() => _rewardedAd(game.returnToSpot);
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +192,8 @@ class _GameScreenState extends State<GameScreen>
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: _Header(game: game, onCalibrate: _calibrate),
+                  child: _Header(
+                      game: game, onCalibrate: _calibrate, onBonusAd: _bonusWithAd),
                 ),
                 // Endless mode gives the world's indicator a strip of its own,
                 // so it never covers the maze.
@@ -150,7 +232,7 @@ class _GameScreenState extends State<GameScreen>
                           Positioned(
                             right: 12,
                             bottom: 12,
-                            child: _BonusButton(game: game),
+                            child: _BonusButton(game: game, onAd: _bonusWithAd),
                           ),
                         // Endless mode shows the hint above the maze instead, so it
                         // does not cover the exit.
@@ -168,6 +250,24 @@ class _GameScreenState extends State<GameScreen>
                             top: 8,
                             child: _indicators()!,
                           ),
+                        if (game.backLeft > 0 && game.status == GameStatus.playing)
+                          Positioned(
+                            left: 130,
+                            right: 90,
+                            bottom: 14,
+                            child: Center(
+                              child: FilledButton.icon(
+                                key: const Key('return-ad'),
+                                style: ButtonStyle(
+                                  backgroundColor: const WidgetStatePropertyAll(Palette.gold),
+                                  foregroundColor: const WidgetStatePropertyAll(Palette.woodDark),
+                                ),
+                                onPressed: _returnWithAd,
+                                icon: const Icon(Icons.ondemand_video_rounded, size: 18),
+                                label: Text(tr('ad.return')),
+                              ),
+                            ),
+                          ),
                         if (game.noticeLeft > 0)
                           Positioned(
                             left: 24,
@@ -175,8 +275,8 @@ class _GameScreenState extends State<GameScreen>
                             top: 56,
                             child: _Notice(text: tr(game.notice, game.noticeArgs)),
                           ),
-                        if (game.won) _EndCard(game: game, won: true),
-                        if (game.lost) _EndCard(game: game, won: false),
+                        if (game.won) _endCard(true),
+                        if (game.lost) _endCard(false),
                       ],
                     );
                   }),
@@ -190,6 +290,26 @@ class _GameScreenState extends State<GameScreen>
   }
 
   static const double _stripHeight = 44;
+
+  Widget _endCard(bool won) {
+    final story = widget.story;
+    final next = story?.next;
+    return _EndCard(
+      game: game,
+      won: won,
+      story: story,
+      stars: _stars,
+      newBalls: _newBalls,
+      nextOpen: next != null && StoryProgress.instance.isUnlocked(next),
+      hasNext: next != null,
+      onMap: () => _afterAd(() => Navigator.of(context).pop()),
+      onNext: () => _afterAd(() => Navigator.of(context).pop(story!.index + 1)),
+      onNewMaze: () => _afterAd(game.newMaze),
+      onRetry: () => _afterAd(game.restart, always: true),
+      onAgain: () => _afterAd(game.resetRun),
+      onContinue: _continueWithAd,
+    );
+  }
 
   /// What sits along the top of the maze: the world's indicator and, for a
   /// ball that can break, how near it came to breaking.
@@ -436,9 +556,12 @@ class _GravityBadge extends StatelessWidget {
 
 /// Uses the collected bonus: three uses per pickup, ten seconds each.
 class _BonusButton extends StatelessWidget {
-  const _BonusButton({required this.game, this.compact = false});
+  const _BonusButton({required this.game, this.compact = false, this.onAd});
 
   final GameController game;
+
+  /// Watches a rewarded ad for one more use; offered when none are left.
+  final VoidCallback? onAd;
 
   /// Smaller and without its caption, for the top bar.
   final bool compact;
@@ -463,11 +586,12 @@ class _BonusButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = game.bonusLeft > 0;
     final enabled = game.bonusCharges > 0 && !active;
+    final canAd = !enabled && !active && onAd != null && game.status == GameStatus.playing;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Opacity(
-          opacity: enabled || active ? 1 : 0.5,
+          opacity: enabled || active || canAd ? 1 : 0.5,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -492,7 +616,7 @@ class _BonusButton extends StatelessWidget {
                 ),
                 child: InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: enabled ? game.useBonus : null,
+                  onTap: enabled ? game.useBonus : (canAd ? onAd : null),
                   child: Padding(
                     padding: EdgeInsets.all(compact ? 8 : 14),
                     child: Icon(icon, color: Colors.white, size: compact ? 20 : 26),
@@ -508,11 +632,14 @@ class _BonusButton extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: const BoxDecoration(
                       color: Palette.gold, shape: BoxShape.circle),
-                  child: Text('${game.bonusCharges}',
-                      style: const TextStyle(
-                          color: Palette.woodDark,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13)),
+                  child: canAd
+                      ? const Icon(Icons.ondemand_video_rounded,
+                          size: 13, color: Palette.woodDark)
+                      : Text('${game.bonusCharges}',
+                          style: const TextStyle(
+                              color: Palette.woodDark,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13)),
                 ),
               ),
             ],
@@ -584,10 +711,11 @@ String formatTime(double seconds) {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.game, required this.onCalibrate});
+  const _Header({required this.game, required this.onCalibrate, this.onBonusAd});
 
   final GameController game;
   final VoidCallback onCalibrate;
+  final VoidCallback? onBonusAd;
 
   @override
   Widget build(BuildContext context) {
@@ -644,7 +772,7 @@ class _Header extends StatelessWidget {
           ),
           // Endless mode: the bonus, on levels that hold one.
           if (game.endless && game.config.bonusCount > 0) ...[
-            _BonusButton(game: game, compact: true),
+            _BonusButton(game: game, compact: true, onAd: onBonusAd),
             const SizedBox(width: 6),
           ],
           _HeaderButton(
@@ -675,10 +803,42 @@ class _HeaderButton extends StatelessWidget {
 }
 
 class _EndCard extends StatelessWidget {
-  const _EndCard({required this.game, required this.won});
+  const _EndCard({
+    required this.game,
+    required this.won,
+    required this.story,
+    required this.stars,
+    required this.newBalls,
+    required this.nextOpen,
+    required this.hasNext,
+    required this.onMap,
+    required this.onNext,
+    required this.onNewMaze,
+    required this.onRetry,
+    required this.onAgain,
+    required this.onContinue,
+  });
 
   final GameController game;
   final bool won;
+
+  /// Story mode: the level, and the stars the run just earned.
+  final StoryLevel? story;
+  final int stars;
+
+  /// Story mode: balls this win gave.
+  final List<BallKind> newBalls;
+
+  /// Story mode: there is a next level, and whether it is open.
+  final bool hasNext;
+  final bool nextOpen;
+
+  final VoidCallback onMap;
+  final VoidCallback onNext;
+  final VoidCallback onNewMaze;
+  final VoidCallback onRetry;
+  final VoidCallback onAgain;
+  final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -701,7 +861,9 @@ class _EndCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
+        // Scrolls rather than overflows when the screen is short.
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(won ? Icons.emoji_events_rounded : Icons.heart_broken_rounded,
@@ -710,6 +872,33 @@ class _EndCard extends StatelessWidget {
             Text(won ? tr('end.win') : tr(game.lostReason),
                 textAlign: TextAlign.center,
                 style: cartoon(22, outline: 1.8)),
+            if (won && story != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                key: const Key('end-stars'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < StoryLevel.maxStars; i++)
+                    Icon(Icons.star_rounded,
+                        size: 40,
+                        color: i < stars ? Palette.gold : Colors.black.withValues(alpha: 0.5)),
+                ],
+              ),
+            ],
+            for (final b in newBalls)
+              Padding(
+                key: Key('new-ball-${b.name}'),
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    BallBubble(kind: b, size: 34),
+                    const SizedBox(width: 8),
+                    Text(tr('ball.new', {'name': infoOf(b).name}),
+                        style: cartoon(15, outline: 1.4, color: Palette.gold)),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             Text(tr('end.time', {'t': formatTime(game.elapsed)}),
                 style: const TextStyle(color: Palette.cream)),
@@ -731,37 +920,76 @@ class _EndCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 6,
               children: [
-                if (game.endless)
-                  FilledButton(
-                    style: gold,
-                    onPressed: game.resetRun,
-                    child: Text(tr('end.again')),
-                  )
-                else if (won)
-                  FilledButton(
-                    style: gold,
-                    onPressed: game.newMaze,
-                    child: Text(tr('end.next')),
-                  )
-                else ...[
-                  FilledButton(
-                    style: gold,
-                    onPressed: game.restart,
-                    child: Text(tr('end.retry')),
+                if (story != null && won) ...[
+                  if (hasNext)
+                    FilledButton(
+                      style: gold,
+                      onPressed: nextOpen ? onNext : null,
+                      child: Text(tr('story.next')),
+                    ),
+                  OutlinedButton(
+                    onPressed: onNewMaze,
+                    child: Text(tr('story.again')),
                   ),
                   OutlinedButton(
-                    onPressed: game.newMaze,
-                    child: Text(tr('end.new_maze')),
+                    onPressed: onMap,
+                    child: Text(tr('story.map')),
                   ),
+                ] else ...[
+                  if (!won && !game.continueUsed)
+                    FilledButton.icon(
+                      key: const Key('end-continue'),
+                      style: gold,
+                      onPressed: onContinue,
+                      icon: const Icon(Icons.ondemand_video_rounded),
+                      label: Text(tr('ad.continue')),
+                    ),
+                  if (game.endless)
+                    // Starting over costs the whole run: not the gold button
+                    // while "continue" is on offer, so it is not tapped by mistake.
+                    (!won && !game.continueUsed
+                        ? OutlinedButton(
+                            onPressed: onAgain,
+                            child: Text(tr('end.again')),
+                          )
+                        : FilledButton(
+                            style: gold,
+                            onPressed: onAgain,
+                            child: Text(tr('end.again')),
+                          ))
+                  else if (won)
+                    FilledButton(
+                      style: gold,
+                      onPressed: onNewMaze,
+                      child: Text(tr('end.next')),
+                    )
+                  else ...[
+                    FilledButton(
+                      style: gold,
+                      onPressed: onRetry,
+                      child: Text(tr('end.retry')),
+                    ),
+                    if (story == null)
+                      OutlinedButton(
+                        onPressed: onNewMaze,
+                        child: Text(tr('end.new_maze')),
+                      ),
+                  ],
+                  if (story != null)
+                    OutlinedButton(
+                      onPressed: onMap,
+                      child: Text(tr('story.map')),
+                    ),
+                  if (!game.endless && story == null)
+                    OutlinedButton(
+                      onPressed: () => showRecords(context, game.config),
+                      child: Text(tr('end.records')),
+                    ),
                 ],
-                if (!game.endless)
-                  OutlinedButton(
-                    onPressed: () => showRecords(context, game.config),
-                    child: Text(tr('end.records')),
-                  ),
               ],
             ),
           ],
+        ),
         ),
       ),
     );

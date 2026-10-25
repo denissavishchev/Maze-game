@@ -1,4 +1,4 @@
-# Maze
+# Orbyrinth
 
 A tilt-controlled ball maze game built with Flutter. Tilt your phone to roll the ball through a circular maze to the star in the centre — press all the buttons to open the gates, dodge the dangers of each world and beat your best time.
 

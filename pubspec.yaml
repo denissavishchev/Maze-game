@@ -1,5 +1,5 @@
-name: maze
-description: "Maze game"
+name: orbyrinth
+description: "Orbyrinth: tilt the phone and roll the ball through round mazes."
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 

@@ -2,11 +2,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/balls.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/balls.dart';
 
 GameController chameleon({WorldKind world = WorldKind.forest, int seed = 3}) => GameController(
     GameConfig(world, 3, ball: BallKind.chameleon),

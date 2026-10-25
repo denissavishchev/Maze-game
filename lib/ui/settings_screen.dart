@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../audio/sound_setting.dart';
+import '../game/ball_collection.dart';
 import '../l10n/strings.dart';
+import '../monetization/vip.dart';
 import 'kit.dart';
 import 'palette.dart';
 
@@ -20,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
         SoundSetting.instance,
         VibrationSetting.instance,
         Sfx.lastError,
+        Vip.instance,
       ]),
       builder: (context, _) => Scaffold(
         body: ArtBackdrop(
@@ -55,6 +58,23 @@ class SettingsScreen extends StatelessWidget {
                         icon: Icons.vibration_rounded,
                         title: tr('set.vibration'),
                         child: _vibration(),
+                      ),
+                      const SizedBox(height: 16),
+                      _card(
+                        icon: Icons.workspace_premium_rounded,
+                        title: tr('set.vip'),
+                        child: _vip(),
+                      ),
+                      const SizedBox(height: 16),
+                      _card(
+                        icon: Icons.sports_baseball_rounded,
+                        title: tr('set.balls'),
+                        child: TextButton(
+                          key: const Key('reset-balls'),
+                          onPressed: BallCollection.instance.reset,
+                          style: TextButton.styleFrom(foregroundColor: Palette.sand),
+                          child: Text(tr('set.balls_reset')),
+                        ),
                       ),
                     ],
                   ),
@@ -124,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => AppLanguage.instance.set(l),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -160,6 +180,25 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _vip() {
+    final on = Vip.instance.on;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(on ? tr('set.vip_on') : tr('set.vip_off'),
+              style: const TextStyle(fontSize: 16, color: Palette.cream)),
+        ),
+        Switch(
+          key: const Key('vip-switch'),
+          value: on,
+          activeThumbColor: Palette.gold,
+          activeTrackColor: Palette.leafMid,
+          onChanged: Vip.instance.set,
+        ),
       ],
     );
   }

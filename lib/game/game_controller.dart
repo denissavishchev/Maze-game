@@ -315,7 +315,10 @@ class GameController extends ChangeNotifier {
   /// With [endless] the game never ends by winning: reaching the centre moves
   /// on to the next world (see [endlessConfig]) until the player loses.
   GameController(this.config,
-      {this.hazardsEnabled = true, this.endless = false, int? seed})
+      {this.hazardsEnabled = true,
+      this.endless = false,
+      this.ballPool,
+      int? seed})
       : _rnd = seed == null ? Random() : Random(seed) {
     if (endless) config = endlessConfig(0, _pickBall(), world: _pickWorld());
     newMaze();
@@ -332,12 +335,17 @@ class GameController extends ChangeNotifier {
         bonuses: (stage ~/ levelsPerBonusRound).isOdd ? 1 : 0,
       );
 
+  /// Endless mode: the balls that may come up (all of them when null).
+  final List<BallKind>? ballPool;
+
   /// Endless mode: a random ball, never the one just played.
   BallKind _pickBall() {
+    final pool = ballPool ?? BallKind.values;
     final others = [
-      for (final b in BallKind.values)
+      for (final b in pool)
         if (b != config.ball) b,
     ];
+    if (others.isEmpty) return pool.first;
     return others[_rnd.nextInt(others.length)];
   }
 
@@ -717,6 +725,21 @@ class GameController extends ChangeNotifier {
   double _invulnerable = 0;
   bool _disposed = false;
 
+  /// Whether the one rewarded second chance of this maze is spent.
+  bool continueUsed = false;
+
+  /// Where the ball was every half second lately, for [continueAfterLoss].
+  final List<Offset> _trail = [];
+  double _recentClock = 0;
+
+  /// Seconds after a second chance during which nothing can end the game.
+  double _mercy = 0;
+
+  /// After the ball is sent back to the start: where it was, and for how
+  /// many more seconds a rewarded ad may put it back there.
+  Offset? _sentFrom;
+  double backLeft = 0;
+
   int get pressedCount => buttonUsed.where((u) => u).length;
   bool get won => status == GameStatus.won;
   bool get lost => status == GameStatus.lost;
@@ -809,6 +832,7 @@ class GameController extends ChangeNotifier {
     geysers = [];
     crusts = [];
     if (config.world == WorldKind.volcano) _placeVolcano();
+    continueUsed = false;
     restart();
   }
 
@@ -1172,6 +1196,11 @@ class GameController extends ChangeNotifier {
     lightFactor = 1;
     _spawnTimer = config.trapInterval;
     _invulnerable = 0;
+    _mercy = 0;
+    _trail.clear();
+    _recentClock = 0;
+    _sentFrom = null;
+    backLeft = 0;
     creatures = hazardsEnabled ? _spawnCreatures() : [];
     notifyListeners();
   }
@@ -1256,7 +1285,14 @@ class GameController extends ChangeNotifier {
       noise(pos);
     }
     if (_invulnerable > 0) _invulnerable -= dt;
+    if (_mercy > 0) _mercy -= dt;
+    if (backLeft > 0) backLeft = max(0, backLeft - dt);
     if (noticeLeft > 0) noticeLeft -= dt;
+    if (status == GameStatus.playing && started && (_recentClock += dt) >= 0.5) {
+      _recentClock = 0;
+      _trail.add(pos);
+      if (_trail.length > 8) _trail.removeAt(0);
+    }
     _buttons();
     _bonuses(dt);
     for (var i = 0; i < gateAnim.length; i++) {
@@ -1760,8 +1796,62 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// A second chance after losing: the ball is back where it stood about
+  /// three seconds before the end (or at the start), the dangers around it
+  /// start over and nothing can end the game for a few seconds. Once per
+  /// maze; false when it is not possible.
+  bool continueAfterLoss() {
+    if (status != GameStatus.lost || continueUsed) return false;
+    continueUsed = true;
+    status = GameStatus.playing;
+    lostReason = '';
+    pos = _trail.length >= 6 ? _trail[_trail.length - 6] : maze.cellCenter(maze.start);
+    vel = Offset.zero;
+    camera = pos;
+    sink = 0;
+    strain = 0;
+    _strainHold = 0;
+    stillTime = 0;
+    hazards = [];
+    cracks = [];
+    beams = [];
+    creatures = hazardsEnabled ? _spawnCreatures() : [];
+    _mercy = 3;
+    _invulnerable = 3;
+    _trail.clear();
+    notifyListeners();
+    return true;
+  }
+
+  static const double returnOffer = 5;
+
+  void _offerReturn() {
+    _sentFrom = pos;
+    backLeft = returnOffer;
+  }
+
+  /// A rewarded ad puts the ball back where it was before it was sent to the
+  /// start, with a few seconds of safety.
+  void returnToSpot() {
+    final from = _sentFrom;
+    if (backLeft <= 0 || from == null || status != GameStatus.playing) return;
+    pos = from;
+    vel = Offset.zero;
+    camera = pos;
+    _invulnerable = 3;
+    backLeft = 0;
+    _sentFrom = null;
+    notifyListeners();
+  }
+
+  /// A rewarded ad gave one more use of the bonus.
+  void grantBonusCharge() {
+    bonusCharges++;
+    notifyListeners();
+  }
+
   void _lose(String reason) {
-    if (status != GameStatus.playing) return;
+    if (status != GameStatus.playing || _mercy > 0) return;
     status = GameStatus.lost;
     lostReason = reason;
     bursts.add(Burst(pos, 1));
@@ -2484,6 +2574,7 @@ class GameController extends ChangeNotifier {
 
   /// Back to the start (the gates stay open), with a message.
   void _sendBack(String key) {
+    _offerReturn();
     bursts.add(Burst(pos, 1));
     pos = maze.cellCenter(maze.start);
     vel = Offset.zero;
@@ -2597,6 +2688,7 @@ class GameController extends ChangeNotifier {
 
   /// A drone spotted the ball: back to the start, gates stay open.
   void caughtByDrone() {
+    _offerReturn();
     bursts.add(Burst(pos, 1));
     pos = maze.cellCenter(maze.start);
     vel = Offset.zero;

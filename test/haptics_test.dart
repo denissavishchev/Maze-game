@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/audio/haptics.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/polar_maze.dart';
-import 'package:maze/game/world.dart';
+import 'package:orbyrinth/audio/haptics.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/polar_maze.dart';
+import 'package:orbyrinth/game/world.dart';
 
 List<Haptic> hitWall(double speed, {int frames = 40}) {
   final g = GameController(const GameConfig(WorldKind.forest, 3),

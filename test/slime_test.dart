@@ -2,12 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/polar_maze.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/balls.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/polar_maze.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/balls.dart';
 
 /// Speed along the outer wall after pressing the ball against it and tilting
 /// along it for a moment. [pressed] false: the same push, but out in the open.

@@ -1,4 +1,4 @@
-package com.devis.maze
+package com.devislaboratory.orbyrinth
 
 import io.flutter.embedding.android.FlutterActivity
 

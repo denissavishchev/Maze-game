@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/polar_maze.dart';
-import 'package:maze/game/world.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/polar_maze.dart';
+import 'package:orbyrinth/game/world.dart';
 
 /// Angle in radians between two orientations.
 double between(Rot a, Rot b) {

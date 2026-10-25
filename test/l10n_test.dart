@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
 
 Set<String> placeholders(String s) =>
     RegExp(r'\{(\w+)\}').allMatches(s).map((m) => m.group(1)!).toSet();

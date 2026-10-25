@@ -1,8 +1,8 @@
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/polar_maze.dart';
-import 'package:maze/game/world.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/polar_maze.dart';
+import 'package:orbyrinth/game/world.dart';
 
 bool _crosses(Offset p1, Offset p2, Seg s) {
   double o(Offset a, Offset b, Offset c) =>

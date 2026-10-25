@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/game_screen.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/game_screen.dart';
 
 void main() {
   testWidgets('the noise bar only exists where noise matters; no bog bar at all', (tester) async {

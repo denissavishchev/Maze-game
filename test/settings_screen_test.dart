@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/audio/haptics.dart';
-import 'package:maze/audio/sfx.dart';
-import 'package:maze/audio/sound_setting.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/home_screen.dart';
-import 'package:maze/ui/settings_screen.dart';
+import 'package:orbyrinth/audio/haptics.dart';
+import 'package:orbyrinth/audio/sfx.dart';
+import 'package:orbyrinth/audio/sound_setting.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/home_screen.dart';
+import 'package:orbyrinth/ui/settings_screen.dart';
 
 Future<void> show(WidgetTester tester, {Size size = const Size(390, 844), double scale = 1}) async {
   tester.view.physicalSize = size * 2;
@@ -27,16 +27,18 @@ void main() {
     Haptics.enabled = false;
   });
 
-  testWidgets('the title on the main screen follows the language chosen in settings', (tester) async {
+  testWidgets('the main screen shows the game name and follows the language chosen in settings', (tester) async {
     AppLanguage.instance.lang = AppLang.pl;
     await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('LABIRYNT'), findsOneWidget);
+    expect(find.text('ORBYRINTH'), findsOneWidget);
+    expect(find.text('BEZ KOŃCA'), findsOneWidget);
     AppLanguage.instance.lang = AppLang.en;
     AppLanguage.instance.notifyListeners();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('MAZE'), findsOneWidget);
-    expect(find.text('LABIRYNT'), findsNothing);
+    expect(find.text('ORBYRINTH'), findsOneWidget, reason: 'the name is the same everywhere');
+    expect(find.text('ENDLESS'), findsOneWidget);
+    expect(find.text('BEZ KOŃCA'), findsNothing);
   });
 
   testWidgets('the language buttons change every text on the screen', (tester) async {
@@ -105,13 +107,13 @@ void main() {
     expect(find.textContaining('Włączone'), findsOneWidget);
     expect(Haptics.active, isTrue);
 
-    await tester.tap(find.byType(Switch).last);
+    await tester.tap(find.byType(Switch).at(1));
     await tester.pump(const Duration(milliseconds: 400));
     expect(VibrationSetting.instance.on, isFalse);
     expect(find.text('Wyłączone'), findsOneWidget);
     expect(Haptics.active, isFalse, reason: 'nothing vibrates with it off');
 
-    await tester.tap(find.byType(Switch).last);
+    await tester.tap(find.byType(Switch).at(1));
     await tester.pump(const Duration(milliseconds: 400));
     expect(VibrationSetting.instance.on, isTrue);
   });

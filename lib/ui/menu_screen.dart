@@ -2,9 +2,11 @@
 import 'package:flutter/material.dart';
 
 import '../game/ball.dart';
+import '../game/ball_collection.dart';
 import '../game/game_controller.dart';
 import '../game/world.dart';
 import '../l10n/strings.dart';
+import 'ball_shop.dart';
 import 'balls.dart';
 import 'game_screen.dart';
 import 'kit.dart';
@@ -35,7 +37,7 @@ class _SelectScreenState extends State<SelectScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: AppLanguage.instance,
+        listenable: Listenable.merge([AppLanguage.instance, BallCollection.instance]),
         builder: (context, _) => _content(context),
       );
 
@@ -149,8 +151,9 @@ class _SelectScreenState extends State<SelectScreen> {
           onTap: onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            height: 84,
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            height: 92,
+            // 6 inside the border keeps a name at least 8 from the tile's edge.
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: selected ? 0.55 : 0.3),
               borderRadius: BorderRadius.circular(16),
@@ -159,16 +162,16 @@ class _SelectScreenState extends State<SelectScreen> {
                 width: selected ? 3.5 : 2.5,
               ),
             ),
-            // Scales down instead of overflowing when the system font is big.
+            // Only the name shrinks (never the picture) when it is too wide.
             child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    child,
-                    const SizedBox(height: 4),
-                    Text(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  child,
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
                       name.replaceAll(' ', '\n'),
                       textAlign: TextAlign.center,
                       style: cartoon(11,
@@ -176,8 +179,8 @@ class _SelectScreenState extends State<SelectScreen> {
                           weight: selected ? FontWeight.w900 : FontWeight.w700,
                           color: selected ? Palette.gold : Palette.cream),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -208,7 +211,7 @@ class _SelectScreenState extends State<SelectScreen> {
 
   /// Tiles in rows of [perRow]; the last row is padded so the tiles all keep
   /// the same size.
-  static const int perRow = 5;
+  static const int perRow = 4;
 
   Widget _grid(List<Widget> tiles) => Column(
         children: [
@@ -338,6 +341,8 @@ class _SelectScreenState extends State<SelectScreen> {
     return _infoRow(BallBubble(kind: b, size: 42), info.name, [
       for (final p in info.pros) line('+', p, const Color(0xFFA6F55B)),
       for (final c in info.cons) line('−', c, const Color(0xFFFF7A6B)),
+      if (!BallCollection.instance.owns(b))
+        line('!', tr('ball.locked_endless'), Palette.gold),
     ]);
   }
 
@@ -370,9 +375,23 @@ class _SelectScreenState extends State<SelectScreen> {
         for (final b in BallKind.values)
           _tile(
             selected: b == ball,
-            onTap: () => setState(() => ball = b),
+            onTap: () async {
+              if (!BallCollection.instance.owns(b)) {
+                await showBallShop(context);
+                if (!mounted || !BallCollection.instance.owns(b)) return;
+              }
+              setState(() => ball = b);
+            },
             name: infoOf(b).name,
-            child: BallBubble(kind: b, size: 42),
+            child: BallCollection.instance.owns(b)
+                ? BallBubble(kind: b, size: 42)
+                : Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Opacity(opacity: 0.4, child: BallBubble(kind: b, size: 42)),
+                      const Icon(Icons.lock_rounded, color: Colors.white, size: 22),
+                    ],
+                  ),
           ),
       ]);
 

@@ -1,14 +1,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/rect_maze.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/game_screen.dart';
-import 'package:maze/ui/maze_art.dart';
-import 'package:maze/ui/worlds.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/rect_maze.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/game_screen.dart';
+import 'package:orbyrinth/ui/maze_art.dart';
+import 'package:orbyrinth/ui/worlds.dart';
 
 GameController glass({int level = 3, int seed = 3}) =>
     GameController(GameConfig(WorldKind.glass, level), seed: seed);

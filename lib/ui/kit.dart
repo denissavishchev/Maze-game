@@ -250,7 +250,10 @@ class ChunkyButton extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Row(
+                  // The label never gets closer than 12 to the button's edge.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (icon != null) ...[
@@ -268,6 +271,7 @@ class ChunkyButton extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ],
               ),

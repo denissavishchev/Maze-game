@@ -7,6 +7,7 @@ import 'menu_screen.dart';
 import 'palette.dart';
 import 'records_sheet.dart';
 import 'settings_screen.dart';
+import 'story_map_screen.dart';
 
 /// Main menu: the key art as the backdrop, the title on a wooden sign and
 /// three buttons.
@@ -35,9 +36,19 @@ class HomeScreen extends StatelessWidget {
                     const _Sign(),
                     const Spacer(flex: 4),
                     ChunkyButton(
+                      label: tr('play.story'),
+                      icon: Icons.map_rounded,
+                      look: ButtonLook.gold,
+                      fontSize: 20,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const StoryMapScreen()),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ChunkyButton(
                       label: tr('play.endless'),
                       icon: Icons.all_inclusive_rounded,
-                      look: ButtonLook.gold,
+                      look: ButtonLook.leaf,
                       fontSize: 20,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(

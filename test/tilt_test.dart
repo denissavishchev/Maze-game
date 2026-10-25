@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/tilt.dart';
+import 'package:orbyrinth/game/tilt.dart';
 
 /// Gravity as the accelerometer reports it for a phone pitched back by
 /// [pitch] radians (0 = lying flat) and rolled sideways by [roll].

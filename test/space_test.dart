@@ -1,11 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maze/game/ball.dart';
-import 'package:maze/game/game_controller.dart';
-import 'package:maze/game/world.dart';
-import 'package:maze/l10n/strings.dart';
-import 'package:maze/ui/worlds.dart';
+import 'package:orbyrinth/game/ball.dart';
+import 'package:orbyrinth/game/game_controller.dart';
+import 'package:orbyrinth/game/world.dart';
+import 'package:orbyrinth/l10n/strings.dart';
+import 'package:orbyrinth/ui/worlds.dart';
 
 GameController ship({int level = 2, int seed = 3, bool hazards = true}) => GameController(
       GameConfig(WorldKind.space, level),

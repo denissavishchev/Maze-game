@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'audio/haptics.dart';
 import 'audio/sfx.dart';
 import 'audio/sound_setting.dart';
+import 'game/ball_collection.dart';
+import 'game/story_progress.dart';
 import 'l10n/strings.dart';
+import 'monetization/vip.dart';
 import 'ui/home_screen.dart';
 import 'ui/palette.dart';
 
@@ -12,6 +15,9 @@ Future<void> main() async {
   await AppLanguage.instance.load();
   await SoundSetting.instance.load();
   await VibrationSetting.instance.load();
+  await Vip.instance.load();
+  await StoryProgress.instance.load();
+  await BallCollection.instance.load();
   Sfx.enabled = true;
   Haptics.enabled = true;
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -24,7 +30,7 @@ class MazeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Maze',
+      title: 'Orbyrinth',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
