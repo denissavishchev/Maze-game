@@ -22,7 +22,7 @@ class _BallShop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([BallCollection.instance, AppLanguage.instance]),
+        listenable: Listenable.merge([BallCollection.instance, AppLanguage.instance, Store.instance]),
         builder: (context, _) => _content(context),
       );
 
@@ -51,12 +51,12 @@ class _BallShop extends StatelessWidget {
                 if (owned.locked.isNotEmpty)
                   ChunkyButton(
                     key: const Key('buy-all-balls'),
-                    label: tr('ball.buy_all', {'price': Store.allBallsPrice}),
+                    label: tr('ball.buy_all', {'price': Store.instance.allBallsPrice ?? '…'}),
                     icon: Icons.shopping_bag_rounded,
                     look: ButtonLook.gold,
                     fontSize: 16,
                     padding: const EdgeInsets.symmetric(vertical: 11),
-                    onTap: Store.buyAllBalls,
+                    onTap: Store.instance.canBuy(Store.allBallsId) ? Store.buyAllBalls : null,
                   ),
                 TextButton(
                   key: const Key('restore-purchases'),
@@ -113,8 +113,9 @@ class _BallShop extends StatelessWidget {
                 backgroundColor: WidgetStatePropertyAll(Palette.gold),
                 foregroundColor: WidgetStatePropertyAll(Palette.woodDark),
               ),
-              onPressed: () => Store.buyBall(b),
-              child: Text(Store.ballPrice),
+              onPressed:
+                  Store.instance.canBuy(Store.ballId(b)) ? () => Store.buyBall(b) : null,
+              child: Text(Store.instance.ballPrice(b) ?? '…'),
             ),
         ],
       ),

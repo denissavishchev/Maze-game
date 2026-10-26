@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'audio/haptics.dart';
@@ -6,6 +8,8 @@ import 'audio/sound_setting.dart';
 import 'game/ball_collection.dart';
 import 'game/story_progress.dart';
 import 'l10n/strings.dart';
+import 'monetization/ad_service.dart';
+import 'monetization/store.dart';
 import 'monetization/vip.dart';
 import 'ui/home_screen.dart';
 import 'ui/palette.dart';
@@ -22,6 +26,9 @@ Future<void> main() async {
   Haptics.enabled = true;
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const MazeApp());
+  // After the first frame, so a consent form never delays the start.
+  unawaited(AdService.start());
+  unawaited(Store.start());
 }
 
 class MazeApp extends StatelessWidget {

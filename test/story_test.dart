@@ -6,6 +6,7 @@ import 'package:orbyrinth/game/story.dart';
 import 'package:orbyrinth/game/story_progress.dart';
 import 'package:orbyrinth/game/world.dart';
 import 'package:orbyrinth/monetization/ad_service.dart';
+import 'package:orbyrinth/monetization/store.dart';
 import 'package:orbyrinth/monetization/vip.dart';
 import 'package:orbyrinth/ui/game_screen.dart';
 import 'package:orbyrinth/ui/settings_screen.dart';
@@ -197,13 +198,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('settings has a VIP switch', (tester) async {
+  testWidgets('settings sells VIP, and shows it once bought', (tester) async {
+    Store.simulate = true;
+    addTearDown(() => Store.simulate = false);
     await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.ensureVisible(find.byKey(const Key('vip-switch')));
-    await tester.tap(find.byKey(const Key('vip-switch')));
-    await tester.pump();
+    expect(find.byKey(const Key('vip-switch')), findsNothing, reason: 'no free switch');
+    await tester.ensureVisible(find.byKey(const Key('vip-buy')));
+    await tester.tap(find.byKey(const Key('vip-buy')));
+    await tester.pump(const Duration(milliseconds: 100));
     expect(Vip.instance.on, isTrue);
+    expect(find.byKey(const Key('vip-buy')), findsNothing);
+  });
+
+  testWidgets('settings links to the privacy policy', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('privacy-policy')), findsOneWidget);
+    expect(privacyPolicyUrl, startsWith('https://'));
+  });
+
+  testWidgets('without a store VIP cannot be bought', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.ensureVisible(find.byKey(const Key('vip-buy')));
+    await tester.tap(find.byKey(const Key('vip-buy')), warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(Vip.instance.on, isFalse);
   });
 
   test('a rewarded ad can put the ball back where it was before it was sent to the start', () {

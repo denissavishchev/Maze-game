@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbyrinth/monetization/store.dart';
 import 'package:orbyrinth/game/ball.dart';
 import 'package:orbyrinth/game/ball_collection.dart';
 import 'package:orbyrinth/game/game_controller.dart';
@@ -104,6 +105,8 @@ void main() {
   });
 
   testWidgets('the shop buys one ball or all of them', (tester) async {
+    Store.simulate = true;
+    addTearDown(() => Store.simulate = false);
     tester.view.physicalSize = const Size(780, 1688);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -124,6 +127,17 @@ void main() {
     await tester.tap(find.byKey(const Key('buy-all-balls')));
     await tester.pump(const Duration(milliseconds: 100));
     expect(BallCollection.instance.locked, isEmpty);
+  });
+
+  test('every ball that is not a starter has a store product', () {
+    expect(Store.purchasableBalls.length, BallKind.values.length - BallCollection.starters.length);
+    expect(Store.productIds, contains('vip'));
+    expect(Store.productIds, contains('all_balls'));
+    expect(Store.productIds, contains('ball_chameleon'));
+    expect(Store.productIds, isNot(contains('ball_wood')));
+    for (final id in Store.productIds) {
+      expect(id, matches(RegExp(r'^[a-z0-9_]+$')), reason: 'valid in both stores');
+    }
   });
 
   testWidgets('a locked ball in the picker opens the shop instead of being chosen',

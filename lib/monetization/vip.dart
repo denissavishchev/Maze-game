@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Whether the player has paid for VIP: no interstitials, and rewarded ads
-/// give their reward at once. For now a switch in the settings; later the
-/// purchase sets it.
+/// give their reward at once. The store's purchase sets it ([Store]).
 class Vip extends ChangeNotifier {
   Vip._();
 

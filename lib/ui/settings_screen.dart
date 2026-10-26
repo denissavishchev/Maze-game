@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../audio/sound_setting.dart';
-import '../game/ball_collection.dart';
 import '../l10n/strings.dart';
+import '../monetization/store.dart';
 import '../monetization/vip.dart';
 import 'kit.dart';
 import 'palette.dart';
+
+/// Where the privacy policy lives (shown in the stores too).
+const String privacyPolicyUrl = 'https://denissavishchev.github.io/Maze-game/privacy-policy.html';
 
 /// Settings: the language and whether sound effects are on.
 class SettingsScreen extends StatelessWidget {
@@ -23,6 +27,7 @@ class SettingsScreen extends StatelessWidget {
         VibrationSetting.instance,
         Sfx.lastError,
         Vip.instance,
+        Store.instance,
       ]),
       builder: (context, _) => Scaffold(
         body: ArtBackdrop(
@@ -61,20 +66,28 @@ class SettingsScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       _card(
-                        icon: Icons.workspace_premium_rounded,
-                        title: tr('set.vip'),
-                        child: _vip(),
+                        icon: Icons.screen_rotation_rounded,
+                        title: tr('set.calibration'),
+                        child: Text(tr('set.calibration_info'),
+                            style: const TextStyle(fontSize: 16, color: Palette.cream)),
                       ),
                       const SizedBox(height: 16),
                       _card(
-                        icon: Icons.sports_baseball_rounded,
-                        title: tr('set.balls'),
+                        icon: Icons.privacy_tip_rounded,
+                        title: tr('set.privacy'),
                         child: TextButton(
-                          key: const Key('reset-balls'),
-                          onPressed: BallCollection.instance.reset,
+                          key: const Key('privacy-policy'),
+                          onPressed: () => launchUrl(Uri.parse(privacyPolicyUrl),
+                              mode: LaunchMode.externalApplication),
                           style: TextButton.styleFrom(foregroundColor: Palette.sand),
-                          child: Text(tr('set.balls_reset')),
+                          child: Text(tr('set.privacy_open')),
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      _card(
+                        icon: Icons.workspace_premium_rounded,
+                        title: tr('set.vip'),
+                        child: _vip(),
                       ),
                     ],
                   ),
@@ -186,18 +199,38 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _vip() {
     final on = Vip.instance.on;
-    return Row(
+    if (on) {
+      return Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: Color(0xFFA6F55B)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(tr('set.vip_on'),
+                style: const TextStyle(fontSize: 16, color: Palette.cream)),
+          ),
+        ],
+      );
+    }
+    final price = Store.instance.vipPrice;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Text(on ? tr('set.vip_on') : tr('set.vip_off'),
-              style: const TextStyle(fontSize: 16, color: Palette.cream)),
+        Text(tr('set.vip_info'),
+            style: const TextStyle(fontSize: 16, color: Palette.cream)),
+        const SizedBox(height: 12),
+        ChunkyButton(
+          key: const Key('vip-buy'),
+          label: tr('set.vip_buy', {'price': price ?? '…'}),
+          icon: Icons.workspace_premium_rounded,
+          look: ButtonLook.gold,
+          fontSize: 16,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          onTap: Store.instance.canBuy(Store.vipId) ? Store.buyVip : null,
         ),
-        Switch(
-          key: const Key('vip-switch'),
-          value: on,
-          activeThumbColor: Palette.gold,
-          activeTrackColor: Palette.leafMid,
-          onChanged: Vip.instance.set,
+        TextButton(
+          key: const Key('vip-restore'),
+          onPressed: Store.restore,
+          child: Text(tr('ball.restore'), style: const TextStyle(color: Palette.sand)),
         ),
       ],
     );
