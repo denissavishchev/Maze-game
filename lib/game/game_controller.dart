@@ -425,7 +425,7 @@ class GameController extends ChangeNotifier {
   static const double impactSoundMax = 5.0;
 
   /// A landed boulder stays this long as a solid block, and this wide.
-  static const double rubbleSeconds = 9;
+  static const double rubbleSeconds = 6;
   static const double rubbleRadius = 0.42;
 
   /// Gust of wind: warning, then how long it blows.
