@@ -2801,7 +2801,7 @@ class GameController extends ChangeNotifier {
   /// A spike trap (mud) or a grave that caves in (graveyard): the ground
   /// cracks first, and the graves give a longer warning.
   Hazard _newPit(Offset p) => config.world == WorldKind.graveyard
-      ? Hazard(p, armAt: 1.1, life: 7, radius: 0.32)
+      ? Hazard(p, armAt: 1.1, life: 5, radius: 0.32)
       : Hazard(p, armAt: 0.5, life: 6);
 
   /// Wolf: walk the shortest corridor route to the ball.
