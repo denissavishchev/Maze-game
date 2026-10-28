@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../game/achievements.dart';
 import '../game/ball.dart';
 import '../game/ball_collection.dart';
 import '../game/game_controller.dart';
@@ -19,7 +20,6 @@ import 'balls.dart';
 import 'game_painter.dart';
 import 'kit.dart';
 import 'palette.dart';
-import 'records_sheet.dart';
 import 'worlds.dart';
 
 class GameScreen extends StatefulWidget {
@@ -138,6 +138,7 @@ class _GameScreenState extends State<GameScreen>
     if (status == GameStatus.won && story != null) {
       final stars = story.starsFor(game.elapsed, game.config.ball);
       _stars = stars;
+      Achievements.instance.storyWon(story, game.elapsed);
       StoryProgress.instance
           .record(story.index, stars, (game.elapsed * 1000).round())
           .then((_) => BallCollection.instance.grantRewards(StoryProgress.instance))
@@ -908,12 +909,6 @@ class _EndCard extends StatelessWidget {
                   style: const TextStyle(
                       color: Palette.gold, fontWeight: FontWeight.w700)),
             ],
-            if ((won || game.endless) && game.recordRank > 0) ...[
-              const SizedBox(height: 4),
-              Text(tr('end.rank', {'n': game.recordRank}),
-                  style: const TextStyle(
-                      color: Palette.gold, fontWeight: FontWeight.w700)),
-            ],
             const SizedBox(height: 14),
             Wrap(
               alignment: WrapAlignment.center,
@@ -981,11 +976,6 @@ class _EndCard extends StatelessWidget {
                     OutlinedButton(
                       onPressed: onMap,
                       child: Text(tr('story.map')),
-                    ),
-                  if (!game.endless && story == null)
-                    OutlinedButton(
-                      onPressed: () => showRecords(context, game.config),
-                      child: Text(tr('end.records')),
                     ),
                 ],
               ],

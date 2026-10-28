@@ -257,11 +257,7 @@ class ChunkyButton extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (icon != null) ...[
-                        Icon(icon, size: fontSize * 1.25, color: Palette.cream, shadows: const [
-                          Shadow(color: Palette.ink, offset: Offset(0, 2)),
-                          Shadow(color: Palette.ink, offset: Offset(1.5, 0)),
-                          Shadow(color: Palette.ink, offset: Offset(-1.5, 0)),
-                        ]),
+                        OutlinedIcon(icon!, size: fontSize * 1.25),
                         const SizedBox(width: 10),
                       ],
                       Flexible(
@@ -278,6 +274,38 @@ class ChunkyButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// An icon with a dark outline. The outline is made of offset copies of the
+/// glyph rather than a text shadow, which some renderers clip to the glyph's
+/// line box (cutting the icon off at the top and bottom).
+class OutlinedIcon extends StatelessWidget {
+  const OutlinedIcon(this.icon, {super.key, required this.size, this.color = Palette.cream});
+
+  final IconData icon;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    const shifts = [Offset(0, 2), Offset(1.5, 0), Offset(-1.5, 0), Offset(0, -1)];
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final o in shifts)
+            Positioned(
+              left: o.dx,
+              top: o.dy,
+              child: Icon(icon, size: size, color: Palette.ink),
+            ),
+          Icon(icon, size: size, color: color),
+        ],
       ),
     );
   }

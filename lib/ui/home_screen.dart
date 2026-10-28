@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../game/world.dart';
 import '../l10n/strings.dart';
 import 'kit.dart';
 import 'menu_screen.dart';
 import 'palette.dart';
-import 'records_sheet.dart';
+import 'achievements_screen.dart';
 import 'settings_screen.dart';
 import 'story_map_screen.dart';
 
@@ -68,11 +67,10 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     ChunkyButton(
-                      label: tr('records'),
+                      label: tr('achievements'),
                       icon: Icons.emoji_events_rounded,
-                      onTap: () => showRecords(
-                        context,
-                        const GameConfig(WorldKind.forest, 1),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const AchievementsScreen()),
                       ),
                     ),
                     const SizedBox(height: 14),

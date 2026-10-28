@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import 'audio/haptics.dart';
 import 'audio/sfx.dart';
 import 'audio/sound_setting.dart';
+import 'game/achievements.dart';
 import 'game/ball_collection.dart';
 import 'game/story_progress.dart';
 import 'l10n/strings.dart';
 import 'monetization/ad_service.dart';
 import 'monetization/store.dart';
 import 'monetization/vip.dart';
+import 'ui/achievement_popup.dart';
 import 'ui/home_screen.dart';
 import 'ui/palette.dart';
 
@@ -22,6 +24,7 @@ Future<void> main() async {
   await Vip.instance.load();
   await StoryProgress.instance.load();
   await BallCollection.instance.load();
+  await Achievements.instance.load();
   Sfx.enabled = true;
   Haptics.enabled = true;
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -44,6 +47,7 @@ class MazeApp extends StatelessWidget {
         scaffoldBackgroundColor: Palette.bg,
         useMaterial3: true,
       ),
+      builder: (context, child) => AchievementPopup(child: child ?? const SizedBox()),
       home: const HomeScreen(),
     );
   }

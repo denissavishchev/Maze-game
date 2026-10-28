@@ -10,7 +10,7 @@ import 'ball.dart';
 import 'maze.dart';
 import 'polar_maze.dart';
 import 'rect_maze.dart';
-import 'records.dart';
+import 'achievements.dart';
 import 'world.dart';
 
 enum GameStatus { playing, won, lost }
@@ -64,6 +64,9 @@ class Hazard {
   final double life;
   final double radius;
   double age = 0;
+
+  /// Graveyard: the ball already rolled past this open grave and was counted.
+  bool dodged = false;
 
   bool get armed => age >= armAt;
 }
@@ -559,7 +562,15 @@ class GameController extends ChangeNotifier {
 
   GameStatus status = GameStatus.playing;
   String lostReason = '';
-  int recordRank = 0;
+
+  /// Whether a sleeping creature has been woken, and a bonus used, since this
+  /// maze began (for the achievements).
+  bool _woke = false;
+  bool _bonusUsed = false;
+  bool _seenByCamera = false;
+
+  /// The ball was lost in this maze (kept over retries, cleared by a new maze).
+  bool _lostHere = false;
 
   /// The clock starts with the first tilt.
   bool started = false;
@@ -728,7 +739,6 @@ class GameController extends ChangeNotifier {
   double _buzzCooldown = 0;
   double _noiseCooldown = 0;
   double _invulnerable = 0;
-  bool _disposed = false;
 
   /// Rewarded second chances spent in this maze, and in this whole endless run.
   int continuesUsed = 0;
@@ -852,6 +862,7 @@ class GameController extends ChangeNotifier {
     crusts = [];
     if (config.world == WorldKind.volcano) _placeVolcano();
     continuesUsed = 0;
+    _lostHere = false;
     restart();
   }
 
@@ -1150,7 +1161,9 @@ class GameController extends ChangeNotifier {
     camera = pos;
     status = GameStatus.playing;
     lostReason = '';
-    recordRank = 0;
+    _woke = false;
+    _bonusUsed = false;
+    _seenByCamera = false;
     started = false;
     elapsed = 0;
     hazards = [];
@@ -1330,14 +1343,40 @@ class GameController extends ChangeNotifier {
     camera = Offset.lerp(camera, pos, min(1, dt * 6))!;
 
     if (status == GameStatus.playing && maze.atGoal(pos)) {
+      _mazeSolved();
       if (endless) {
         _nextStage();
       } else {
         status = GameStatus.won;
-        _saveRecord();
       }
     }
     notifyListeners();
+  }
+
+  /// The goal was reached: the achievements that depend on how the maze went.
+  void _mazeSolved() {
+    final a = Achievements.instance;
+    final big = config.level >= Achievements.bigMaze;
+    a.worldWon(config.world);
+    if (!_woke && hazardsEnabled) {
+      if (config.world == WorldKind.graveyard) a.unlock('ghost_whisperer');
+      if (config.world == WorldKind.forest) a.unlock('sneaky_wolf');
+    }
+    if (!big) return;
+    if (!_lostHere) a.unlock('big_maze_survivor');
+    switch (config.world) {
+      case WorldKind.underground:
+        if (!_bonusUsed) a.unlock('in_the_dark');
+      case WorldKind.volcano:
+        a.unlock('lava_walker');
+      case WorldKind.ocean:
+        a.unlock('deep_diver');
+      case WorldKind.space:
+        if (!_seenByCamera && hazardsEnabled) a.unlock('laser_dancer');
+      default:
+        break;
+    }
+    if (config.ball == BallKind.glass && !_lostHere) a.unlock('glass_cannon');
   }
 
   /// Endless mode: the centre was reached, so the next world begins. The clock
@@ -1346,6 +1385,7 @@ class GameController extends ChangeNotifier {
     final carried = elapsed;
     final left = maze;
     stage++;
+    Achievements.instance.endlessProgress(stage, runContinues);
     config = endlessConfig(stage, _pickBall(), world: _pickWorld());
     // The next maze starts right below the exit of this one.
     _nextStartCol = left is RectMaze ? left.goalCol : null;
@@ -1759,6 +1799,8 @@ class GameController extends ChangeNotifier {
     }
     bonusCharges--;
     bonusLeft = bonusDuration;
+    _bonusUsed = true;
+    Achievements.instance.bonusUsed();
     bursts.add(Burst(pos, 0));
     switch (config.world) {
       case WorldKind.forest:
@@ -1823,6 +1865,7 @@ class GameController extends ChangeNotifier {
   bool continueAfterLoss() {
     if (status != GameStatus.lost || continuesLeft <= 0) return false;
     continuesUsed++;
+    _lostHere = true;
     runContinues++;
     status = GameStatus.playing;
     lostReason = '';
@@ -1874,33 +1917,9 @@ class GameController extends ChangeNotifier {
   void _lose(String reason) {
     if (status != GameStatus.playing || _mercy > 0) return;
     status = GameStatus.lost;
+    _lostHere = true;
     lostReason = reason;
     bursts.add(Burst(pos, 1));
-    if (endless && stage > 0) _saveEndlessRecord();
-  }
-
-  Future<void> _saveEndlessRecord() async {
-    final rank = await EndlessRecordStore.add(EndlessRecord(
-      mazes: stage,
-      millis: (elapsed * 1000).round(),
-      playedAt: DateTime.now(),
-    ));
-    if (_disposed) return;
-    recordRank = rank;
-    notifyListeners();
-  }
-
-  Future<void> _saveRecord() async {
-    final entry = RecordEntry(
-      world: config.world,
-      level: config.level,
-      millis: (elapsed * 1000).round(),
-      playedAt: DateTime.now(),
-    );
-    final rank = await RecordStore.add(entry);
-    if (_disposed) return;
-    recordRank = rank;
-    notifyListeners();
   }
 
   // ---- hazards ----------------------------------------------------------
@@ -1957,6 +1976,7 @@ class GameController extends ChangeNotifier {
 
   void _wake(Creature w) {
     if (w.asleep) {
+      _woke = true;
       final cry = config.world == WorldKind.graveyard ? Sound.ghostWake : Sound.wolfWake;
       Sfx.play(cry, volume: _earshot(w.pos));
     }
@@ -2154,9 +2174,9 @@ class GameController extends ChangeNotifier {
         }
         for (final cam in cameras) {
           if (status != GameStatus.playing) break;
-          cam.alert = cameraSees(cam)
-              ? cam.alert + dt
-              : max(0, cam.alert - dt * 1.5);
+          final sees = cameraSees(cam);
+          if (sees) _seenByCamera = true;
+          cam.alert = sees ? cam.alert + dt : max(0, cam.alert - dt * 1.5);
           if (cam.alert >= cameraReaction) _lose('lose.camera');
         }
       case WorldKind.underground:
@@ -2186,6 +2206,12 @@ class GameController extends ChangeNotifier {
         }
       } else if (h.armed && (h.pos - pos).distance < h.radius) {
         _lose(config.world == WorldKind.graveyard ? 'lose.grave' : 'lose.trap');
+      } else if (h.armed &&
+          !h.dodged &&
+          config.world == WorldKind.graveyard &&
+          (h.pos - pos).distance < Achievements.graveDodgeReach) {
+        h.dodged = true;
+        Achievements.instance.graveDodged();
       }
     }
     hazards.removeWhere((h) => h.age > h.life);
@@ -2876,11 +2902,5 @@ class GameController extends ChangeNotifier {
         budget = 0;
       }
     }
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
   }
 }

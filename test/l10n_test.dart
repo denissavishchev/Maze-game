@@ -28,13 +28,13 @@ void main() {
   test('texts follow the selected language', () {
     AppLanguage.instance.lang = AppLang.pl;
     expect(tr('play'), 'GRAJ');
-    expect(tr('end.rank', {'n': 3}), 'Miejsce w rekordach: 3');
+    expect(tr('ach.got', {'name': 'X'}), 'Osiągnięcie: X');
     AppLanguage.instance.lang = AppLang.en;
     expect(tr('play'), 'PLAY');
-    expect(tr('end.rank', {'n': 3}), 'Record rank: 3');
+    expect(tr('ach.got', {'name': 'X'}), 'Achievement: X');
     AppLanguage.instance.lang = AppLang.ru;
     expect(tr('play'), 'ИГРАТЬ');
-    expect(tr('end.rank', {'n': 3}), 'Место в рекордах: 3');
+    expect(tr('ach.got', {'name': 'X'}), 'Достижение: X');
     expect(tr('no.such.key'), 'no.such.key', reason: 'unknown keys show themselves');
   });
 
