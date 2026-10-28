@@ -64,6 +64,10 @@ class GameConfig {
   int get jellyCount => _pick(const [2, 2, 3, 3, 4]);
   double get jellySpeed => 0.55 + 0.08 * (level - minLevel);
 
+  /// Rewarded second chances per maze after losing: one in the smallest
+  /// maze, five in the biggest.
+  int get continueCount => _pick(const [1, 2, 3, 4, 5]);
+
   /// Wolves or drones.
   int get chaserCount => _pick(const [1, 1, 2, 2, 3]);
 

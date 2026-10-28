@@ -59,6 +59,24 @@ void main() {
     expect(ghost.asleep, isTrue, reason: 'lost interest and fell asleep');
   });
 
+  test('a ghost hangs still while the ball stands, and sleeps after 5 s', () {
+    final g = yard(level: 3, seed: 5);
+    final ghost = wake(g, dist: 8);
+    for (var i = 0; i < 60 * 4; i++) {
+      g.update(1 / 60, Offset.zero);
+    }
+    final at = ghost.pos;
+    for (var i = 0; i < 30; i++) {
+      g.update(1 / 60, Offset.zero);
+    }
+    expect(ghost.pos, at, reason: 'frozen while the ball is still');
+    expect(ghost.asleep, isFalse, reason: 'not yet 5 s');
+    for (var i = 0; i < 60; i++) {
+      g.update(1 / 60, Offset.zero);
+    }
+    expect(ghost.asleep, isTrue);
+  });
+
   test('a loud bump wakes a sleeping ghost', () {
     final g = yard(level: 3, seed: 5);
     final ghost = g.creatures.first;

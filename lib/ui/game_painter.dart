@@ -901,7 +901,8 @@ class GamePainter extends CustomPainter {
   /// A grave that caves in: a headstone while the ground cracks and shakes,
   /// then an open pit.
   void _grave(Canvas c, Hazard h, double t, double fadeOut) {
-    final scale = 0.8;
+    // The open pit is half the width of a corridor.
+    const scale = 0.4 / 0.86;
     c.save();
     c.translate(h.pos.dx, h.pos.dy);
     c.scale(scale);

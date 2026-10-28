@@ -5,6 +5,7 @@ import 'package:flutter/painting.dart' show Offset;
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../l10n/strings.dart';
+import '../monetization/vip.dart';
 import 'ball.dart';
 import 'maze.dart';
 import 'polar_maze.dart';
@@ -403,6 +404,10 @@ class GameController extends ChangeNotifier {
   /// ...and lies down this long afterwards.
   static const double boredBeforeSleep = 1.5;
 
+  /// A ghost hangs motionless while the ball stands still, and fades into its
+  /// grave when that lasts this long.
+  static const double ghostSleepAfter = 5.0;
+
   /// How close the ball must come to a cell to uncover it on the minimap.
   static const double exploreRadius = 1.9;
 
@@ -725,8 +730,22 @@ class GameController extends ChangeNotifier {
   double _invulnerable = 0;
   bool _disposed = false;
 
-  /// Whether the one rewarded second chance of this maze is spent.
-  bool continueUsed = false;
+  /// Rewarded second chances spent in this maze, and in this whole endless run.
+  int continuesUsed = 0;
+  int runContinues = 0;
+
+  /// Endless: a VIP gets this many second chances per run, then the run is over.
+  static const int vipRunContinues = 10;
+
+  /// Endless has no limit for a player who watches the ads; a VIP is capped.
+  bool get continuesUnlimited => endless && !Vip.instance.on;
+
+  /// Second chances still on offer: more of them in the bigger mazes, and in
+  /// endless as many as the player is willing to watch an ad for.
+  int get continuesLeft {
+    if (!endless) return max(0, config.continueCount - continuesUsed);
+    return continuesUnlimited ? 1 << 30 : max(0, vipRunContinues - runContinues);
+  }
 
   /// Where the ball was every half second lately, for [continueAfterLoss].
   final List<Offset> _trail = [];
@@ -832,7 +851,7 @@ class GameController extends ChangeNotifier {
     geysers = [];
     crusts = [];
     if (config.world == WorldKind.volcano) _placeVolcano();
-    continueUsed = false;
+    continuesUsed = 0;
     restart();
   }
 
@@ -1382,6 +1401,7 @@ class GameController extends ChangeNotifier {
   /// Endless mode: back to the first world with the clock at zero.
   void resetRun() {
     stage = 0;
+    runContinues = 0;
     _recent.clear();
     config = endlessConfig(0, _pickBall(), world: _pickWorld());
     newMaze();
@@ -1798,11 +1818,12 @@ class GameController extends ChangeNotifier {
 
   /// A second chance after losing: the ball is back where it stood about
   /// three seconds before the end (or at the start), the dangers around it
-  /// start over and nothing can end the game for a few seconds. Once per
-  /// maze; false when it is not possible.
+  /// start over and nothing can end the game for a few seconds. As often as
+  /// [GameConfig.continueCount] allows per maze; false when it is not possible.
   bool continueAfterLoss() {
-    if (status != GameStatus.lost || continueUsed) return false;
-    continueUsed = true;
+    if (status != GameStatus.lost || continuesLeft <= 0) return false;
+    continuesUsed++;
+    runContinues++;
     status = GameStatus.playing;
     lostReason = '';
     pos = _trail.length >= 6 ? _trail[_trail.length - 6] : maze.cellCenter(maze.start);
@@ -2103,21 +2124,16 @@ class GameController extends ChangeNotifier {
             g.grace -= dt;
             continue;
           }
-          // The ball froze: the ghost loses interest, then fades into its grave.
-          if (stillTime >= stillBeforeBored) {
-            g.calm += dt;
-            if (g.calm >= boredBeforeSleep) {
-              g.asleep = true;
-              g.calm = 0;
-            }
+          // The ball froze: the ghost freezes with it, then fades into its grave.
+          if (stillTime > 0) {
+            if (stillTime >= ghostSleepAfter) g.asleep = true;
             continue;
           }
-          g.calm = 0;
-          // Straight at the ball, through the walls.
+          // Straight at the ball, through the walls, as fast as the ball rolls.
           final to = pos - g.pos;
           final d = to.distance;
           if (d > 1e-6) {
-            g.pos += to / d * min(d, speed * 0.85 * dt);
+            g.pos += to / d * min(d, vel.distance * dt);
             g.angle = to.direction;
           }
           if ((g.pos - pos).distance < 0.4) {
@@ -2801,7 +2817,7 @@ class GameController extends ChangeNotifier {
   /// A spike trap (mud) or a grave that caves in (graveyard): the ground
   /// cracks first, and the graves give a longer warning.
   Hazard _newPit(Offset p) => config.world == WorldKind.graveyard
-      ? Hazard(p, armAt: 1.1, life: 5, radius: 0.32)
+      ? Hazard(p, armAt: 1.1, life: 5, radius: 0.12)
       : Hazard(p, armAt: 0.5, life: 6);
 
   /// Wolf: walk the shortest corridor route to the ball.

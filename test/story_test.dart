@@ -157,18 +157,18 @@ void main() {
     expect(await reward, isTrue);
   });
 
-  test('a second chance puts the ball back, once per maze', () {
-    final g = GameController(GameConfig(WorldKind.glass, 3), seed: 5);
+  test('a second chance puts the ball back, as often as the maze size allows', () {
+    final g = GameController(GameConfig(WorldKind.glass, 1), seed: 5);
     g.started = true;
     var guard = 0;
     while (g.status == GameStatus.playing && guard++ < 2000) {
       g.update(1 / 60, Offset.zero);
     }
     expect(g.lost, isTrue);
-    expect(g.continueUsed, isFalse);
+    expect(g.continuesLeft, 1);
     expect(g.continueAfterLoss(), isTrue);
     expect(g.status, GameStatus.playing);
-    expect(g.continueUsed, isTrue);
+    expect(g.continuesLeft, 0);
     for (var i = 0; i < 60; i++) {
       g.update(1 / 60, Offset.zero);
     }
@@ -179,9 +179,31 @@ void main() {
       g.update(1 / 60, Offset.zero);
     }
     expect(g.lost, isTrue);
-    expect(g.continueAfterLoss(), isFalse, reason: 'only once per maze');
+    expect(g.continueAfterLoss(), isFalse, reason: 'one chance in the smallest maze');
     g.newMaze();
-    expect(g.continueUsed, isFalse);
+    expect(g.continuesLeft, 1);
+  });
+
+  test('endless: unlimited second chances, but a VIP gets ten per run', () {
+    final g = GameController(GameController.endlessConfig(0, BallKind.wood),
+        endless: true, seed: 5);
+    Vip.instance.on = false;
+    expect(g.continuesUnlimited, isTrue);
+    for (var i = 0; i < 12; i++) {
+      g.status = GameStatus.lost;
+      expect(g.continueAfterLoss(), isTrue, reason: 'no limit without VIP (#$i)');
+    }
+    Vip.instance.on = true;
+    g.resetRun();
+    expect(g.continuesLeft, 10);
+    for (var i = 0; i < 10; i++) {
+      g.status = GameStatus.lost;
+      expect(g.continueAfterLoss(), isTrue);
+    }
+    g.status = GameStatus.lost;
+    expect(g.continuesLeft, 0);
+    expect(g.continueAfterLoss(), isFalse, reason: 'ten used: the run is over');
+    Vip.instance.on = false;
   });
 
   testWidgets('the map shows all levels, locks the far ones and opens the start sheet',

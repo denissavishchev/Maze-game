@@ -936,18 +936,20 @@ class _EndCard extends StatelessWidget {
                     child: Text(tr('story.map')),
                   ),
                 ] else ...[
-                  if (!won && !game.continueUsed)
+                  if (!won && game.continuesLeft > 0)
                     FilledButton.icon(
                       key: const Key('end-continue'),
                       style: gold,
                       onPressed: onContinue,
                       icon: const Icon(Icons.ondemand_video_rounded),
-                      label: Text(tr('ad.continue')),
+                      label: Text(game.continuesUnlimited
+                          ? tr('ad.continue')
+                          : '${tr('ad.continue')} · ${game.continuesLeft}'),
                     ),
                   if (game.endless)
                     // Starting over costs the whole run: not the gold button
                     // while "continue" is on offer, so it is not tapped by mistake.
-                    (!won && !game.continueUsed
+                    (!won && game.continuesLeft > 0
                         ? OutlinedButton(
                             onPressed: onAgain,
                             child: Text(tr('end.again')),
