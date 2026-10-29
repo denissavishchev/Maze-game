@@ -48,7 +48,7 @@ void main() {
     for (var seed = 0; seed < 30; seed++) {
       for (var level = 1; level <= 5; level++) {
         final g = ship(level: level, seed: seed);
-        expect(g.cameras.length, lessThanOrEqualTo(g.config.cameraCount));
+        expect(g.cameras.length, g.config.cameraCount, reason: 'seed $seed level $level: all cameras placed');
         placed += g.cameras.length;
         final taken = [
           for (final l in g.lasers) g.maze.cellAt(l.center),

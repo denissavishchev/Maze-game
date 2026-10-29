@@ -269,7 +269,7 @@ void main() {
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     GameController? g;
-    for (var seed = 0; seed < 300 && g == null; seed++) {
+    for (var seed = 0; seed < 6000 && g == null; seed++) {
       final c = GameController(GameController.endlessConfig(0, BallKind.wood),
           endless: true, seed: seed);
       c.started = true;

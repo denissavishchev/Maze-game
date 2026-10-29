@@ -109,6 +109,12 @@ class GamePainter extends CustomPainter {
         size.height - (maze.rows + RectMaze.padBottom) * s + (1 - e) * maze.rows * s,
       );
     }
+    // The shifting maze turns about the ball, which stays in the middle.
+    if (game.spins) {
+      canvas.translate(size.width / 2, size.height / 2);
+      canvas.rotate(game.spinAngle);
+      canvas.translate(-size.width / 2, -size.height / 2);
+    }
     canvas.translate(origin.dx, origin.dy);
     canvas.scale(s);
 
@@ -1905,23 +1911,27 @@ class GamePainter extends CustomPainter {
       c.drawCircle(h.pos, 0.1 + 0.3 * k, Paint()..color = Colors.black.withValues(alpha: 0.45 * k));
       return;
     }
+    // The fire fills half the width of a corridor.
+    c.save();
+    c.translate(h.pos.dx, h.pos.dy);
+    c.scale(0.4 / 0.95);
     c.drawCircle(
-      h.pos,
+      Offset.zero,
       0.85,
       Paint()
-        ..shader = ui.Gradient.radial(h.pos, 0.85, [
+        ..shader = ui.Gradient.radial(Offset.zero, 0.85, [
           const Color(0xFFFF7A2E).withValues(alpha: 0.5 * fadeOut),
           const Color(0xFFFF7A2E).withValues(alpha: 0),
         ]),
     );
     c.drawOval(
-      Rect.fromCenter(center: h.pos.translate(0, 0.05), width: 0.95, height: 0.7),
+      Rect.fromCenter(center: const Offset(0, 0.05), width: 0.95, height: 0.7),
       Paint()..color = const Color(0xFF1A0D0A).withValues(alpha: 0.85 * fadeOut),
     );
     // Flames licking up around the rock.
     for (var i = 0; i < 6; i++) {
       final a = i * kTwoPi / 6 + 0.3;
-      final base = h.pos + polar(0.26, a);
+      final base = Offset.zero + polar(0.26, a);
       final flick = 0.7 + 0.3 * sin(t * 11 + i * 2);
       final tall = (0.3 + 0.14 * sin(i * 3.1)) * flick;
       final flame = Path()
@@ -1939,9 +1949,10 @@ class GamePainter extends CustomPainter {
         Paint()..color = const Color(0xFFFFD04A).withValues(alpha: fadeOut),
       );
     }
-    c.drawCircle(h.pos, 0.2, Paint()..color = Palette.ink.withValues(alpha: fadeOut));
-    c.drawCircle(h.pos, 0.16, Paint()..color = const Color(0xFF4A322C).withValues(alpha: fadeOut));
-    c.drawCircle(h.pos.translate(-0.04, -0.04), 0.06, Paint()..color = const Color(0xFFFF8A3A).withValues(alpha: fadeOut));
+    c.drawCircle(Offset.zero, 0.2, Paint()..color = Palette.ink.withValues(alpha: fadeOut));
+    c.drawCircle(Offset.zero, 0.16, Paint()..color = const Color(0xFF4A322C).withValues(alpha: fadeOut));
+    c.drawCircle(const Offset(-0.04, -0.04), 0.06, Paint()..color = const Color(0xFFFF8A3A).withValues(alpha: fadeOut));
+    c.restore();
   }
 
   // ---- hazards ----------------------------------------------------------
@@ -1980,14 +1991,18 @@ class GamePainter extends CustomPainter {
       _bomb(c, h, t, fadeOut);
       return;
     }
-    // Spikes pop out of the ground.
+    // Spikes pop out of the ground, filling half the width of a corridor.
+    c.save();
+    c.translate(h.pos.dx, h.pos.dy);
+    c.scale(0.4 / 0.68);
+    const o = Offset.zero;
     final k = (h.age / h.armAt).clamp(0.0, 1.0);
-    c.drawCircle(h.pos, 0.34 * k, Paint()..color = const Color(0xFF140C06).withValues(alpha: fadeOut));
+    c.drawCircle(o, 0.34 * k, Paint()..color = const Color(0xFF140C06).withValues(alpha: fadeOut));
     if (h.armed) {
       final spike = Paint()..color = const Color(0xFFD5DCE0).withValues(alpha: fadeOut);
       for (var i = 0; i < 7; i++) {
         final a = i * 2 * pi / 7;
-        final base = h.pos + polar(0.17, a);
+        final base = o + polar(0.17, a);
         c.drawPath(
           Path()
             ..moveTo(base.dx + 0.05 * cos(a + pi / 2), base.dy + 0.05 * sin(a + pi / 2))
@@ -1997,10 +2012,10 @@ class GamePainter extends CustomPainter {
           spike,
         );
       }
-      c.drawCircle(h.pos.translate(0, -0.2), 0.06, spike);
+      c.drawCircle(o.translate(0, -0.2), 0.06, spike);
     } else {
       c.drawCircle(
-        h.pos,
+        o,
         0.34,
         Paint()
           ..color = Colors.redAccent.withValues(alpha: 0.5)
@@ -2008,6 +2023,7 @@ class GamePainter extends CustomPainter {
           ..strokeWidth = 0.04,
       );
     }
+    c.restore();
   }
 
   void _wolf(Canvas c, Creature w) {
@@ -2247,6 +2263,7 @@ class MiniMapPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(Path()..addOval(Offset.zero & size));
     canvas.translate(center.dx, center.dy);
+    if (game.spins) canvas.rotate(game.spinAngle);
     canvas.scale(s);
 
     final fog = render.fogFor(game);

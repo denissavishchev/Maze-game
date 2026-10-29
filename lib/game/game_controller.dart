@@ -152,7 +152,7 @@ class Crumble {
 class GlassBeam {
   GlassBeam(this.a, this.b, this.halfWidth);
 
-  static const double warning = 1.3;
+  static const double warning = 0.6;
   static const double burn = 0.5;
 
   final Offset a;
@@ -175,7 +175,7 @@ class LavaFlow {
 }
 
 /// Volcano: a steam vent that hisses, then erupts. The jet shoves the ball
-/// away, and scalds it at the very middle.
+/// away, and a ball right over the vent is thrown to a safe spot on the map.
 class Geyser {
   const Geyser(this.pos, this.phase);
 
@@ -328,12 +328,19 @@ class GameController extends ChangeNotifier {
     newMaze();
   }
 
+  /// The worlds endless mode plays: all but the shifting maze, which turns the
+  /// whole maze and so needs the round one.
+  static final List<WorldKind> endlessWorlds = [
+    for (final w in WorldKind.values)
+      if (w != WorldKind.shifting) w,
+  ];
+
   /// Endless mode: the level for [stage] in [world] (the worlds in turn when
   /// none is given). The first five levels have no bonuses, the next five one
   /// bonus each, and so on.
   static GameConfig endlessConfig(int stage, BallKind ball, {WorldKind? world}) =>
       GameConfig(
-        world ?? WorldKind.values[stage % WorldKind.values.length],
+        world ?? endlessWorlds[stage % endlessWorlds.length],
         GameConfig.minLevel,
         ball: ball,
         bonuses: (stage ~/ levelsPerBonusRound).isOdd ? 1 : 0,
@@ -364,7 +371,7 @@ class GameController extends ChangeNotifier {
   /// A random world, but none of the last [worldsNotRepeated] played.
   WorldKind _pickWorld() {
     final options = [
-      for (final w in WorldKind.values)
+      for (final w in endlessWorlds)
         if (!_recent.contains(w)) w,
     ];
     final world = options[_rnd.nextInt(options.length)];
@@ -457,6 +464,13 @@ class GameController extends ChangeNotifier {
   static const double cameraHalfAngle = 0.4;
   static const double cameraSweep = 1.0;
   static const double cameraReaction = 0.4;
+
+  /// Cameras keep at least this far from each other (less only when they would
+  /// not all fit), and a camera is only
+  /// placed where a ball rolling at [cameraTestSpeed] can get past it unseen
+  /// at some moment of its sweep.
+  static const double cameraSpacing = 5.0;
+  static const double cameraTestSpeed = 2.0;
 
   /// Spaceship: the new direction of gravity is announced this long before.
   static const double gravityWarning = 1.2;
@@ -605,6 +619,9 @@ class GameController extends ChangeNotifier {
   List<Crust> crusts = [];
   double _volcanoClock = 0;
 
+  /// The eruption (counted per geyser) that already threw the ball.
+  final Map<Geyser, int> _thrownAt = {};
+
   /// Lava warns this long before it floods; it kills within [lavaLength] along
   /// the corridor and [lavaWidth] across it.
   static const double lavaWarning = 0.9;
@@ -616,6 +633,11 @@ class GameController extends ChangeNotifier {
   static const double geyserWarning = 1.0;
   static const double geyserBurst = 1.3;
   static const double geyserScald = 0.5;
+
+  /// A ball thrown by a geyser lands at least this far from it and from any
+  /// other danger of the volcano.
+  static const double geyserThrowMin = 3.0;
+  static const double volcanoClear = 1.3;
   static const double geyserReach = 1.5;
   static const double geyserForce = 26;
 
@@ -623,8 +645,8 @@ class GameController extends ChangeNotifier {
   static const double crustRadius = 0.45;
   static const double crustSpeed = 0.9;
 
-  /// A volcanic bomb leaves fire this wide, for this long.
-  static const double bombFire = 0.42;
+  /// A volcanic bomb leaves fire this wide (half a corridor), for this long.
+  static const double bombFire = 0.12;
   static const double bombFireSeconds = 3.5;
 
   /// Factory: belts, presses, magnets and their clock.
@@ -661,6 +683,43 @@ class GameController extends ChangeNotifier {
   /// Shifting maze: the doors, how long one warns before it shuts.
   List<ShiftDoor> doors = [];
   static const double doorWarning = 1.2;
+
+  /// Shifting maze: the whole maze turns like a record on a turntable, so the
+  /// view and the tilt turn with it. It spins at [spinSpeed] radians a second
+  /// one way, then the other, changing every [spinMin] to [spinMax] seconds;
+  /// the speed eases in and out over about [spinEase] seconds, never jerking.
+  /// Only the round maze spins: the rectangular one is shown whole.
+  static const double spinSpeed = 0.35;
+  static const double spinMin = 5;
+  static const double spinMax = 10;
+  static const double spinEase = 0.9;
+  double spinAngle = 0;
+  double spinVel = 0;
+  double _spinDir = 1;
+  double _spinTimer = 0;
+
+  bool get spins => config.world == WorldKind.shifting && maze is! RectMaze;
+
+  void _resetSpin() {
+    spinAngle = 0;
+    spinVel = 0;
+    // Only the shifting maze draws random numbers here, so other worlds keep
+    // their seeded layouts.
+    if (!spins) return;
+    _spinDir = _rnd.nextBool() ? 1 : -1;
+    _spinTimer = spinMin + _rnd.nextDouble() * (spinMax - spinMin);
+  }
+
+  void _updateSpin(double dt) {
+    if (!spins) return;
+    _spinTimer -= dt;
+    if (_spinTimer <= 0) {
+      _spinDir = -_spinDir;
+      _spinTimer = spinMin + _rnd.nextDouble() * (spinMax - spinMin);
+    }
+    spinVel += (_spinDir * spinSpeed - spinVel) * (1 - exp(-dt / spinEase));
+    spinAngle = (spinAngle + spinVel * dt) % kTwoPi;
+  }
 
   /// Gate to point the player at after a button was pressed (-1 = none).
   int hintGate = -1;
@@ -890,35 +949,99 @@ class GameController extends ChangeNotifier {
 
     for (var k = 0; k < kinds.length; k++) {
       final want = (route.length * (k + 1) / (kinds.length + 1)).round();
-      // The straightest free cell close to where it is wanted.
-      int? at;
-      var best = double.infinity;
+      // The straightest free cells close to where it is wanted, best first.
+      final scored = <(double, int)>[];
       for (var i = want - 6; i <= want + 6; i++) {
         if (i < 2 || i > route.length - 2) continue;
         if (used.contains(route[i]) || special.contains(route[i])) continue;
-        final score = bend(i) + 0.03 * (i - want).abs();
-        if (score < best) {
-          best = score;
-          at = i;
-        }
+        scored.add((bend(i) + 0.03 * (i - want).abs(), i));
       }
-      if (at == null) continue;
-      final cell = route[at];
-      used.add(cell);
-      final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
-      final along = dir / dir.distance;
-      final center = maze.cellCenter(cell);
-      final phase = _rnd.nextDouble() * config.laserPeriod;
-      if (kinds[k] == 2) {
-        // Looks along the corridor, one way or the other, and sweeps across.
-        final look = along.direction + (_rnd.nextBool() ? 0 : pi);
-        cameras.add(SecurityCamera(center, look, _rnd.nextDouble() * config.cameraPeriod));
-      } else if (kinds[k] == 0) {
-        lasers.add(Laser(center, along, phase));
-      } else {
-        airlocks.add(Airlock(center, along, _rnd.nextDouble() * airlockCycle));
+      scored.sort((a, b) => a.$1.compareTo(b.$1));
+      for (final (_, at) in scored) {
+        final cell = route[at];
+        final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
+        final along = dir / dir.distance;
+        final center = maze.cellCenter(cell);
+        if (kinds[k] == 2) {
+          final cam = _cameraAt(route, at, cameraSpacing);
+          if (cam == null) continue;
+          cameras.add(cam);
+        } else if (kinds[k] == 0) {
+          lasers.add(Laser(center, along, _rnd.nextDouble() * config.laserPeriod));
+        } else {
+          airlocks.add(Airlock(center, along, _rnd.nextDouble() * airlockCycle));
+        }
+        used.add(cell);
+        break;
       }
     }
+    // Every camera the level calls for gets its place: the ones that did not
+    // fit are looked for along the whole route, with the spacing eased a step
+    // at a time.
+    final byBend = [
+      for (var i = 2; i <= route.length - 2; i++)
+        if (!special.contains(route[i])) i,
+    ]..sort((a, b) => bend(a).compareTo(bend(b)));
+    for (final spacing in [cameraSpacing, 4.0, 3.2, 2.6, 2.0]) {
+      for (final at in byBend) {
+        if (cameras.length >= config.cameraCount) return;
+        if (used.contains(route[at])) continue;
+        final cam = _cameraAt(route, at, spacing);
+        if (cam == null) continue;
+        cameras.add(cam);
+        used.add(route[at]);
+      }
+    }
+  }
+
+  /// A camera on route cell [at], looking along the corridor one way or the
+  /// other and sweeping across: null when another camera is closer than
+  /// [spacing], or when no moment of its sweep lets a ball slip past.
+  SecurityCamera? _cameraAt(List<int> route, int at, double spacing) {
+    final center = maze.cellCenter(route[at]);
+    if (cameras.any((c) => (c.pos - center).distance < spacing)) return null;
+    final dir = maze.cellCenter(route[at + 1]) - maze.cellCenter(route[at - 1]);
+    final look = dir.direction;
+    final flip = _rnd.nextBool();
+    for (final f in [flip, !flip]) {
+      final c = SecurityCamera(center, look + (f ? 0 : pi), _rnd.nextDouble() * config.cameraPeriod);
+      if (_cameraPassable(c, route, at)) return c;
+    }
+    return null;
+  }
+
+  /// Whether a ball rolling along the route past [cam] (route cell [at]) can
+  /// get by without being caught if it picks its moment, wherever the sweep is.
+  bool _cameraPassable(SecurityCamera cam, List<int> route, int at) {
+    final pts = maze.routePoints(route.sublist(max(0, at - 8), min(route.length, at + 9)));
+    final lens = [0.0];
+    for (var i = 1; i < pts.length; i++) {
+      lens.add(lens.last + (pts[i] - pts[i - 1]).distance);
+    }
+    const dt = 0.05;
+    final period = config.cameraPeriod;
+    for (var t0 = 0.0; t0 < period; t0 += 0.25) {
+      var alert = 0.0;
+      var caught = false;
+      var seg = 1;
+      for (var s = 0.0; s <= lens.last; s += cameraTestSpeed * dt) {
+        while (seg < lens.length - 1 && lens[seg] < s) {
+          seg++;
+        }
+        final k = (s - lens[seg - 1]) / max(1e-9, lens[seg] - lens[seg - 1]);
+        final p = Offset.lerp(pts[seg - 1], pts[seg], k.clamp(0.0, 1.0))!;
+        final angle = _cameraAngleAt(cam, t0 + s / cameraTestSpeed);
+        alert = _cameraSeesAt(cam, p, angle, gatesOpen: true)
+            ? alert + dt
+            : max(0, alert - dt * 1.5);
+        if (alert >= cameraReaction) {
+          caught = true;
+          break;
+        }
+      }
+      if (!caught) return true;
+    }
+    return false;
   }
 
   /// Ocean: jellyfish start in cells well away from the start; their patrol
@@ -1208,6 +1331,8 @@ class GameController extends ChangeNotifier {
     _beamTimer = config.beamInterval;
     _beamNoticed = false;
     _volcanoClock = 0;
+    _resetSpin();
+    _thrownAt.clear();
     _factoryClock = 0;
     _candyClock = 0;
     for (final d in doors) {
@@ -1298,6 +1423,12 @@ class GameController extends ChangeNotifier {
     }
     if (config.world == WorldKind.space && hazardsEnabled && started) {
       _updateGravity(dt);
+    }
+    if (hazardsEnabled && started) _updateSpin(dt);
+    // The maze is turned on the screen, so the tilt is turned back into it.
+    if (spins && spinAngle != 0) {
+      final c = cos(-spinAngle), s = sin(-spinAngle);
+      tilt = Offset(tilt.dx * c - tilt.dy * s, tilt.dx * s + tilt.dy * c);
     }
     final before = pos;
     _physics(dt, tilt);
@@ -1587,18 +1718,22 @@ class GameController extends ChangeNotifier {
   }
 
   /// Which way the camera looks now, in radians.
-  double cameraAngle(SecurityCamera c) =>
-      c.base + cameraSweep * sin(2 * pi * (_spaceClock + c.phase) / config.cameraPeriod);
+  double cameraAngle(SecurityCamera c) => _cameraAngleAt(c, _spaceClock);
+
+  double _cameraAngleAt(SecurityCamera c, double clock) =>
+      c.base + cameraSweep * sin(2 * pi * (clock + c.phase) / config.cameraPeriod);
 
   /// Whether the ball is in the camera's view: near enough, inside the cone
   /// and with no wall in between.
-  bool cameraSees(SecurityCamera c) {
-    final v = pos - c.pos;
+  bool cameraSees(SecurityCamera c) => _cameraSeesAt(c, pos, cameraAngle(c));
+
+  bool _cameraSeesAt(SecurityCamera c, Offset p, double angle, {bool gatesOpen = false}) {
+    final v = p - c.pos;
     if (v.distance > cameraRange) return false;
-    var diff = (v.direction - cameraAngle(c)) % kTwoPi;
+    var diff = (v.direction - angle) % kTwoPi;
     if (diff > pi) diff -= kTwoPi;
     if (diff.abs() > cameraHalfAngle) return false;
-    return _lineClear(c.pos, pos);
+    return _lineClear(c.pos, p, gatesOpen: gatesOpen);
   }
 
   /// How far a ray from [from] along [angle] gets before a wall stops it
@@ -2506,6 +2641,38 @@ class GameController extends ChangeNotifier {
     return push;
   }
 
+  /// The ball is hurled to a random cell it could walk to, clear of the
+  /// geysers, lava, crust and fire, far from the vent, never the start, the
+  /// goal or a button. Nothing hurts it and it is not sent back to the start.
+  void _throwFromGeyser(Geyser from) {
+    final here = maze.cellAt(pos);
+    final avoid = {maze.start, maze.goal, ...maze.buttonCells};
+    final dangers = [
+      for (final l in lavas) l.center,
+      for (final k in crusts) k.pos,
+      for (final g in geysers) g.pos,
+      for (final h in hazards) h.pos,
+    ];
+    final cells = [
+      for (var c = 0; c < maze.cellCount; c++)
+        if (!avoid.contains(c) && maze.path(here, c, gateOpen) != null) c,
+    ]..shuffle(_rnd);
+    // Roomy first; where the part of the maze the ball can reach is small,
+    // settle for a spot a little closer.
+    for (final (far, clearance) in [(geyserThrowMin, volcanoClear), (1.5, 1.0), (1.0, 0.7)]) {
+      for (final c in cells) {
+        final p = maze.cellCenter(c);
+        if ((p - from.pos).distance < far) continue;
+        if (!dangers.every((d) => (d - p).distance >= clearance)) continue;
+        bursts.add(Burst(pos, 2));
+        pos = p;
+        vel = Offset.zero;
+        bursts.add(Burst(pos, 2));
+        return;
+      }
+    }
+  }
+
   void _updateVolcano(double dt) {
     _volcanoClock += dt;
     final shielded = bonusLeft > 0;
@@ -2518,8 +2685,11 @@ class GameController extends ChangeNotifier {
       }
       for (final g in geysers) {
         if (geyserPhase(g) == 2 && (g.pos - pos).distance < geyserScald) {
-          _lose('lose.steam');
-          return;
+          final eruption = ((_volcanoClock + g.phase) / config.geyserPeriod).floor();
+          if (_thrownAt[g] != eruption) {
+            _thrownAt[g] = eruption;
+            _throwFromGeyser(g);
+          }
         }
       }
     }
@@ -2743,9 +2913,9 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  bool _lineClear(Offset a, Offset b) {
+  bool _lineClear(Offset a, Offset b, {bool gatesOpen = false}) {
     for (final s in maze.segmentsAlong(a, b)) {
-      if (s.gate >= 0 && gateOpen[s.gate]) continue;
+      if (s.gate >= 0 && (gatesOpen || gateOpen[s.gate])) continue;
       if (_cross(a, b, s.a, s.b)) return false;
     }
     return true;
@@ -2842,9 +3012,10 @@ class GameController extends ChangeNotifier {
 
   /// A spike trap (mud) or a grave that caves in (graveyard): the ground
   /// cracks first, and the graves give a longer warning.
+  /// Either one fills only half the corridor, so the ball can slip by.
   Hazard _newPit(Offset p) => config.world == WorldKind.graveyard
       ? Hazard(p, armAt: 1.1, life: 5, radius: 0.12)
-      : Hazard(p, armAt: 0.5, life: 6);
+      : Hazard(p, armAt: 0.5, life: 6, radius: 0.12);
 
   /// Wolf: walk the shortest corridor route to the ball.
   void _followPath(Creature w, double dt, double speed) {

@@ -63,12 +63,14 @@ class _SelectScreenState extends State<SelectScreen> {
                       _buttons(),
                       const SizedBox(height: 12),
                       _label(tr('sel.world')),
-                      _infoList([for (final w in WorldKind.values) _worldInfo(w)]),
+                      _infoList([for (final w in GameController.endlessWorlds) _worldInfo(w)]),
                       const SizedBox(height: 12),
                       _label(tr('sel.ball')),
                       _infoList([for (final b in BallKind.values) _ballInfo(b)]),
                       const SizedBox(height: 12),
                     ] else ...[
+                      _buttons(),
+                      const SizedBox(height: 12),
                       _label(tr('sel.world')),
                       _worldRow(),
                       _worldDescription(),
@@ -83,7 +85,6 @@ class _SelectScreenState extends State<SelectScreen> {
                       _sizePicker(),
                       const SizedBox(height: 12),
                     ],
-                    if (!widget.endless) _buttons(),
                   ],
                 ),
               ),
@@ -94,8 +95,8 @@ class _SelectScreenState extends State<SelectScreen> {
     );
   }
 
-  /// Back (left) and play (right) share one row: at the bottom, or in endless
-  /// mode right under the description.
+  /// Back (left) and play (right) share one row: at the top of the screen, or
+  /// in endless mode right under the description.
   Widget _buttons() => Row(
     children: [
       ChunkyIconButton(

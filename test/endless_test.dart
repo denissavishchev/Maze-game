@@ -42,7 +42,7 @@ void main() {
           endless: true, seed: seed);
       firsts.add(g.config.world);
     }
-    expect(firsts.length, WorldKind.values.length, reason: 'any world can come first');
+    expect(firsts.length, GameController.endlessWorlds.length, reason: 'any world can come first');
 
     final g = GameController(GameController.endlessConfig(0, BallKind.wood),
         endless: true, hazardsEnabled: false, seed: 11);
@@ -55,7 +55,8 @@ void main() {
       expect(played.sublist(i - 3, i), isNot(contains(played[i])),
           reason: 'stage $i (${played[i].name}) repeats one of the last three');
     }
-    expect(played.toSet().length, WorldKind.values.length, reason: 'all of them turn up');
+    expect(played.toSet().length, GameController.endlessWorlds.length, reason: 'all of them turn up');
+    expect(played, isNot(contains(WorldKind.shifting)), reason: 'the shifting maze turns, so it is not in endless');
   });
 
   test('the maze is rectangular: start in the top row, exit in the bottom row', () {

@@ -149,7 +149,7 @@ const _tables = <AppLang, Map<String, String>>{
     'endless.desc':
         'Labirynt zajmuje cały ekran. Kulka startuje u góry, a ty prowadzisz ją na dół, do wyjścia. Gdy przez nie przejdzie, ekran przewija się do kolejnego labiryntu i zmienia się świat: las, błoto, góry, podziemie, miasto, i znowu od początku, bez końca, dopóki nie przegrasz.',
     'endless.rules':
-        '3 przyciski na każdym poziomie otwierają bramy. Pierwsze 5 poziomów bez bonusów, kolejne 5 z jednym bonusem na poziom, i tak na zmianę.',
+        '3 przyciski na każdym poziomie otwierają bramy. Pierwsze 5 poziomów bez bonusów, kolejne 5 z jednym bonusem na poziom, i tak na zmianę. Świata Ruchomy tu nie ma, bo kręci się w nim cały labirynt.',
     'notice.level': 'Poziom {n}: {world}',
     'end.levels': 'Ukończone poziomy: {n}',
     'end.again': 'Zagraj od nowa',
@@ -220,7 +220,7 @@ const _tables = <AppLang, Map<String, String>>{
     'lose.floor': 'Podłoga rozsypała się pod tobą!',
     'world.volcano.name': 'Wulkan',
     'world.volcano.blurb':
-        'Rzeki lawy zalewają korytarze i stygną w rytmie. Z nieba spadają bomby wulkaniczne i zostawiają ogień, gejzery pary odpychają kulkę, a cienka skorupa pęka pod kulką, która stoi w miejscu.',
+        'Rzeki lawy zalewają korytarze i stygną w rytmie. Z nieba spadają bomby wulkaniczne i zostawiają ogień, gejzery pary odpychają kulkę, a gdy wybuchną pod nią, wyrzucają ją w losowe miejsce, a cienka skorupa pęka pod kulką, która stoi w miejscu.',
     'note.volcano': 'lawa: {l} · gejzery: {g} · skorupa pęka po {s} s',
     'bonus.volcano': 'Schłodzenie',
     'lose.lava': 'Wpadłeś w lawę!',
@@ -241,7 +241,7 @@ const _tables = <AppLang, Map<String, String>>{
     'notice.gummy': 'Gumisiek cię złapał! Wracasz na start.',
     'world.shifting.name': 'Ruchomy',
     'world.shifting.blurb':
-        'Ściany labiryntu pojawiają się i znikają, więc droga zmienia się w trakcie gry. Nie widać, które ściany są stałe, a które ruchome; tuż przed pojawieniem się ściana migocze. Wyjście nigdy nie zostanie odcięte.',
+        'Ściany labiryntu pojawiają się i znikają, a cały labirynt kręci się jak płyta winylowa, co kilka sekund w drugą stronę. Nie widać, które ściany są stałe, a które ruchome; tuż przed pojawieniem się ściana migocze. Wyjście nigdy nie zostanie odcięte.',
     'note.shifting': 'ruchome ściany: {d}',
     'bonus.shifting': 'Wizja',
     'lose.bomb': 'Trafiła cię bomba wulkaniczna!',
@@ -417,7 +417,7 @@ const _tables = <AppLang, Map<String, String>>{
     'endless.desc':
         'The maze fills the whole screen. The ball starts at the top and you guide it down to the exit. When it rolls through, the screen scrolls on to the next maze and the world changes: forest, mud, mountains, underground, city, and round again, with no end until you lose.',
     'endless.rules':
-        '3 buttons on every level open the gates. The first 5 levels have no bonuses, the next 5 have one bonus each, and so on in turn.',
+        '3 buttons on every level open the gates. The first 5 levels have no bonuses, the next 5 have one bonus each, and so on in turn. The Shifting world is not here, because it turns the whole maze.',
     'notice.level': 'Level {n}: {world}',
     'end.levels': 'Levels completed: {n}',
     'end.again': 'Play again',
@@ -488,7 +488,7 @@ const _tables = <AppLang, Map<String, String>>{
     'lose.floor': 'The floor crumbled under you!',
     'world.volcano.name': 'Volcano',
     'world.volcano.blurb':
-        'Rivers of lava flood the corridors and cool in a rhythm. Volcanic bombs fall and leave fire behind, steam geysers shove the ball away, and thin crust gives way under a ball that stands still.',
+        'Rivers of lava flood the corridors and cool in a rhythm. Volcanic bombs fall and leave fire behind, steam geysers shove the ball away and fling it to a random spot if they erupt under it, and thin crust gives way under a ball that stands still.',
     'note.volcano': 'lava: {l} · geysers: {g} · crust breaks after {s} s',
     'bonus.volcano': 'Cooling',
     'lose.lava': 'You fell into the lava!',
@@ -509,7 +509,7 @@ const _tables = <AppLang, Map<String, String>>{
     'notice.gummy': 'A gummy bear got you! Back to the start.',
     'world.shifting.name': 'Shifting',
     'world.shifting.blurb':
-        'Walls of the maze appear and vanish, so the way changes as you play. Nothing tells the fixed walls from the moving ones; a wall flickers just before it appears. The exit is never cut off.',
+        'Walls of the maze appear and vanish, and the whole maze turns like a vinyl record, reversing every few seconds. Nothing tells the fixed walls from the moving ones; a wall flickers just before it appears. The exit is never cut off.',
     'note.shifting': 'moving walls: {d}',
     'bonus.shifting': 'Vision',
     'lose.bomb': 'A volcanic bomb hit you!',
@@ -685,7 +685,7 @@ const _tables = <AppLang, Map<String, String>>{
     'endless.desc':
         'Лабиринт занимает весь экран. Шарик стартует сверху, а ты ведёшь его вниз, к выходу. Когда он через него выкатится, экран прокручивается дальше, мир меняется: лес, грязь, горы, подземелье, город, и снова по кругу, без конца, пока не проиграешь.',
     'endless.rules':
-        '3 кнопки на каждом уровне открывают ворота. Первые 5 уровней без бонусов, следующие 5 с одним бонусом на уровень, и так по очереди.',
+        '3 кнопки на каждом уровне открывают ворота. Первые 5 уровней без бонусов, следующие 5 с одним бонусом на уровень, и так по очереди. Мира «Сдвиг» здесь нет, потому что в нём вращается весь лабиринт.',
     'notice.level': 'Уровень {n}: {world}',
     'end.levels': 'Пройдено уровней: {n}',
     'end.again': 'Играть заново',
@@ -756,7 +756,7 @@ const _tables = <AppLang, Map<String, String>>{
     'lose.floor': 'Пол рассыпался под тобой!',
     'world.volcano.name': 'Вулкан',
     'world.volcano.blurb':
-        'Реки лавы заливают коридоры и остывают в ритме. С неба падают вулканические бомбы и оставляют огонь, гейзеры пара отталкивают шарик, а тонкая корка трескается под шариком, который стоит на месте.',
+        'Реки лавы заливают коридоры и остывают в ритме. С неба падают вулканические бомбы и оставляют огонь, гейзеры пара отталкивают шарик, а если извергаются под ним, забрасывают его в случайное место, а тонкая корка трескается под шариком, который стоит на месте.',
     'note.volcano': 'лава: {l} · гейзеры: {g} · корка трескается через {s} с',
     'bonus.volcano': 'Охлаждение',
     'lose.lava': 'Ты упал в лаву!',
@@ -777,7 +777,7 @@ const _tables = <AppLang, Map<String, String>>{
     'notice.gummy': 'Мармеладный мишка поймал тебя! Возврат на старт.',
     'world.shifting.name': 'Сдвиг',
     'world.shifting.blurb':
-        'Стены лабиринта появляются и исчезают, так что путь меняется по ходу игры. Не видно, какие стены постоянные, а какие подвижные; перед появлением стена мерцает. Выход никогда не будет отрезан.',
+        'Стены лабиринта появляются и исчезают, а весь лабиринт вращается как виниловая пластинка и каждые несколько секунд меняет направление. Не видно, какие стены постоянные, а какие подвижные; перед появлением стена мерцает. Выход никогда не будет отрезан.',
     'note.shifting': 'движущиеся стены: {d}',
     'bonus.shifting': 'Зрение',
     'lose.bomb': 'Тебя накрыла вулканическая бомба!',

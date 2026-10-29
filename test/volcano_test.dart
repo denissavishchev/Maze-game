@@ -113,14 +113,32 @@ void main() {
     expect(g.status, GameStatus.playing, reason: 'outside the middle it only shoves');
   });
 
-  test('standing over the vent when it erupts scalds the ball', () {
+  test('standing over the vent when it erupts throws the ball to a safe spot', () {
     final g = volcano(level: 3, seed: 5);
     g.started = true;
     final vent = g.geysers.first;
     waitFor(g, () => g.geyserPhase(vent) == 2, at: g.maze.cellCenter(g.maze.start));
     g.pos = vent.pos;
     g.update(1 / 60, Offset.zero);
-    expect(g.lostReason, 'lose.steam');
+    expect(g.lost, isFalse, reason: 'it does not kill');
+    expect((g.pos - vent.pos).distance, greaterThanOrEqualTo(1.0));
+    expect(g.pos, isNot(g.maze.cellCenter(g.maze.start)), reason: 'not sent back to the start');
+    expect(g.maze.cellCenter(g.maze.goal), isNot(g.pos));
+    for (final l in g.lavas) {
+      expect((l.center - g.pos).distance, greaterThanOrEqualTo(0.7));
+    }
+    for (final k in g.crusts) {
+      expect((k.pos - g.pos).distance, greaterThanOrEqualTo(0.7));
+    }
+    for (final o in g.geysers) {
+      expect((o.pos - g.pos).distance, greaterThanOrEqualTo(0.7));
+    }
+    // One throw per eruption: landing back on it in the same eruption does nothing.
+    final landed = g.pos;
+    g.pos = vent.pos;
+    g.update(1 / 60, Offset.zero);
+    expect((g.pos - vent.pos).distance, lessThan(0.1), reason: 'not thrown a second time');
+    expect((landed - vent.pos).distance, greaterThan(0.5));
   });
 
   test('thin crust cracks under a ball that stands still, then gives way', () {

@@ -55,8 +55,8 @@ void main() {
   test('a ball that keeps moving never breaks the floor, and cracks mend', () {
     final g = glass(level: 5, seed: 2);
     g.started = true;
-    // Stand for a while, then roll on.
-    for (var i = 0; i < 120; i++) {
+    // Stand for a while (less than it takes to fall through), then roll on.
+    for (var i = 0; i < 60; i++) {
       g.update(1 / 60, Offset.zero);
     }
     expect(g.cracks, isNotEmpty);

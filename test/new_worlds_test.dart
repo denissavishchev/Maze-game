@@ -40,15 +40,69 @@ void main() {
       }
     });
 
-    test('there are ten times as many shifting walls as before', () {
+    test('there are fewer shifting walls than before', () {
       expect([for (var l = 1; l <= 5; l++) GameConfig(WorldKind.shifting, l).doorCount],
-          [20, 30, 40, 50, 60]);
+          [10, 14, 18, 22, 26]);
       for (final level in [1, 3, 5]) {
         final g = world(WorldKind.shifting, level: level, seed: 2);
         expect(g.doors.length, greaterThanOrEqualTo(GameConfig(WorldKind.shifting, level).doorCount ~/ 2),
             reason: 'level $level');
         g.dispose();
       }
+    });
+
+    test('the round maze spins like a record: smoothly, and the other way every 5 to 10 s', () {
+      final g = world(WorldKind.shifting, level: 3, seed: 4);
+      expect(g.spins, isTrue);
+      g.started = true;
+      var flips = 0;
+      var lastSign = 0;
+      var sinceFlip = 0.0;
+      final gaps = <double>[];
+      var maxJump = 0.0;
+      var prevVel = g.spinVel;
+      for (var i = 0; i < 60 * 80; i++) {
+        g.pos = g.maze.cellCenter(g.maze.start);
+        g.vel = Offset.zero;
+        g.update(1 / 60, Offset.zero);
+        maxJump = max(maxJump, (g.spinVel - prevVel).abs());
+        prevVel = g.spinVel;
+        expect(g.spinVel.abs(), lessThanOrEqualTo(GameController.spinSpeed + 1e-9));
+        sinceFlip += 1 / 60;
+        final sign = g.spinVel > 0.05 ? 1 : g.spinVel < -0.05 ? -1 : 0;
+        if (sign != 0 && sign != lastSign) {
+          if (lastSign != 0) {
+            flips++;
+            gaps.add(sinceFlip);
+          }
+          lastSign = sign;
+          sinceFlip = 0;
+        }
+      }
+      expect(flips, greaterThanOrEqualTo(5), reason: 'it keeps reversing');
+      // Between two reversals: 5 to 10 s, give or take the time it takes to ease.
+      for (final gap in gaps) {
+        expect(gap, inInclusiveRange(4.0, 11.0));
+      }
+      expect(maxJump, lessThan(0.02), reason: 'the speed changes gradually, never in a jerk');
+    });
+
+    test('a tilt along the screen rolls the ball along the turned maze', () {
+      final g = world(WorldKind.shifting, level: 3, seed: 4);
+      g.started = true;
+      g.spinAngle = pi / 2;
+      final from = g.pos;
+      g.update(1 / 60, const Offset(0, 1));
+      // The maze is turned a quarter clockwise: its +x runs down the screen.
+      expect((g.pos - from).dx, greaterThan(0));
+      expect((g.pos - from).dx.abs(), greaterThan((g.pos - from).dy.abs()));
+    });
+
+    test('no other world spins, and the endless rectangle stays still', () {
+      expect(world(WorldKind.forest).spins, isFalse);
+      final e = GameController(GameController.endlessConfig(0, BallKind.wood, world: WorldKind.shifting),
+          endless: true, seed: 1);
+      expect(e.spins, isFalse);
     });
 
     test('every door sits on an open passage, away from the start and the exit', () {
@@ -95,36 +149,6 @@ void main() {
       }
       expect(closedSeen, greaterThan(0), reason: 'doors do shut');
       expect(blocked, greaterThan(0));
-    });
-
-    test('the same holds in the rectangular maze of endless mode', () {
-      GameController? g;
-      for (var seed = 0; seed < 300 && g == null; seed++) {
-        final c = GameController(GameController.endlessConfig(0, BallKind.wood),
-            endless: true, seed: seed);
-        if (c.config.world == WorldKind.shifting) {
-          g = c;
-        } else {
-          c.dispose();
-        }
-      }
-      expect(g, isNotNull);
-      expect(g!.maze, isA<RectMaze>());
-      expect(g.doors.length, greaterThanOrEqualTo(10));
-      g.started = true;
-      final rnd = Random(4);
-      var closed = 0;
-      for (var i = 0; i < 60 * 40; i++) {
-        if (i % 20 == 0) {
-          final a = rnd.nextDouble() * 2 * pi;
-          g.vel = Offset(cos(a), sin(a)) * 2;
-        }
-        g.update(1 / 60, Offset.zero);
-        if (g.status != GameStatus.playing || g.scrolling) break;
-        if (i % 5 == 0) expect(g.canFinishForTest(), isTrue, reason: 'frame $i');
-        closed += g.doors.where((d) => d.state == 2).length;
-      }
-      expect(closed, greaterThan(0));
     });
 
     test('a door does not shut on a ball standing in its way', () {
@@ -513,6 +537,8 @@ void main() {
         }
         g.dispose();
       }
+      // The shifting maze turns the whole maze, so it is not in endless mode.
+      if (w == WorldKind.shifting) continue;
       GameController? e;
       for (var seed = 0; seed < 300 && e == null; seed++) {
         final c = GameController(GameController.endlessConfig(0, BallKind.wood),

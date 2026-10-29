@@ -99,17 +99,17 @@ class GameConfig {
   double get gravityInterval => _pick(const [7.0, 6.5, 6.0, 5.5, 5.0]);
 
   /// Glass: seconds standing on one spot before the floor gives way.
-  double get crumbleSeconds => _pick(const [5.5, 5.0, 4.5, 4.0, 3.5]);
+  double get crumbleSeconds => _pick(const [2.75, 2.5, 2.25, 2.0, 1.75]);
 
   /// Glass: seconds between one laser and the next, and how many at once.
-  double get beamInterval => _pick(const [5.0, 4.5, 4.0, 3.5, 3.0]);
-  int get beamCount => _pick(const [1, 1, 1, 2, 2]);
+  double get beamInterval => _pick(const [2.5, 2.25, 2.0, 1.75, 1.5]);
+  int get beamCount => _pick(const [2, 2, 2, 4, 4]);
 
   /// Volcano: rivers of lava across the route. A full cycle, and how long of
   /// it the lava is molten (it warns for a short while before that).
   int get lavaCount => _pick(const [2, 2, 3, 4, 5]);
   double get lavaPeriod => _pick(const [6.6, 6.2, 5.8, 5.4, 5.0]);
-  double get lavaMolten => _pick(const [1.8, 1.9, 2.0, 2.1, 2.2]);
+  double get lavaMolten => _pick(const [1.0, 1.0, 1.1, 1.1, 1.2]);
 
   /// Volcano: steam geysers, and seconds from one eruption to the next.
   int get geyserCount => _pick(const [2, 2, 3, 3, 4]);
@@ -149,7 +149,7 @@ class GameConfig {
 
   /// Shifting maze: doors that close and open again, and how long they stay
   /// open and shut. Never all at once, and never so that the way is cut.
-  int get doorCount => _pick(const [20, 30, 40, 50, 60]);
+  int get doorCount => _pick(const [10, 14, 18, 22, 26]);
   double get doorOpenSeconds => _pick(const [6.5, 6.0, 5.5, 5.0, 4.5]);
   double get doorClosedSeconds => _pick(const [4.0, 4.5, 5.0, 5.5, 6.0]);
 
