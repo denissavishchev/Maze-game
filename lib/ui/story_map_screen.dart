@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../game/ball.dart';
@@ -109,22 +110,38 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
           style: cartoon(14, spacing: 1.5, outline: 1.5, color: Palette.gold),
         ),
       ),
-      // Four nodes to a row, the trail snaking back and forth.
-      for (var r = 0; r * 4 < levels.length; r++)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            textDirection: r.isOdd ? TextDirection.rtl : TextDirection.ltr,
+      // Four nodes to a row, the trail snaking back and forth; the trail
+      // itself is drawn behind the nodes between levels that are done.
+      Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _TrailPainter(
+                stars: [for (final l in levels) StoryProgress.instance.stars(l.index)],
+              ),
+            ),
+          ),
+          Column(
             children: [
-              for (var k = 0; k < 4; k++)
-                Expanded(
-                  child: r * 4 + k < levels.length
-                      ? _Node(level: levels[r * 4 + k], onTap: _open)
-                      : const SizedBox.shrink(),
+              for (var r = 0; r * 4 < levels.length; r++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: _TrailPainter.rowGap),
+                  child: Row(
+                    textDirection: r.isOdd ? TextDirection.rtl : TextDirection.ltr,
+                    children: [
+                      for (var k = 0; k < 4; k++)
+                        Expanded(
+                          child: r * 4 + k < levels.length
+                              ? _Node(level: levels[r * 4 + k], onTap: _open)
+                              : const SizedBox.shrink(),
+                        ),
+                    ],
+                  ),
                 ),
             ],
           ),
-        ),
+        ],
+      ),
     ];
   }
 
@@ -157,6 +174,59 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
       if (StoryProgress.instance.isUnlocked(nextLevel)) await _open(nextLevel);
     }
   }
+}
+
+/// The trail between levels that are done: a band from one node to the next
+/// along the snake, bending round at the end of each row. Each piece has the
+/// colour of the outline of the weaker of its two nodes: gold when both have
+/// all three stars, sand otherwise.
+class _TrailPainter extends CustomPainter {
+  const _TrailPainter({required this.stars});
+
+  /// Stars of the chapter's levels, in order.
+  final List<int> stars;
+
+  static const double nodeSize = 62;
+  static const double rowHeight = 81; // the node, its gap and its stars
+  static const double rowGap = 10;
+  static const double width = 6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final col = size.width / 4;
+    Offset center(int i) {
+      final r = i ~/ 4;
+      final k = i % 4;
+      final visual = r.isOdd ? 3 - k : k;
+      return Offset((visual + 0.5) * col, r * (rowHeight + rowGap) + nodeSize / 2);
+    }
+
+    for (var i = 0; i + 1 < stars.length; i++) {
+      if (stars[i] == 0 || stars[i + 1] == 0) continue;
+      final a = center(i);
+      final b = center(i + 1);
+      final both = stars[i] < stars[i + 1] ? stars[i] : stars[i + 1];
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = width
+        ..color = both == StoryLevel.maxStars ? Palette.gold : Palette.sand;
+      final path = Path()..moveTo(a.dx, a.dy);
+      if ((i + 1) % 4 == 0) {
+        // The end of a row: out to the side and round to the row below.
+        final out = (i ~/ 4).isEven ? 57.0 : -57.0;
+        path.cubicTo(a.dx + out, a.dy, b.dx + out, b.dy, b.dx, b.dy);
+      } else {
+        path.lineTo(b.dx, b.dy);
+      }
+      canvas.drawPath(
+          path, Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = width + 3..color = Palette.ink);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TrailPainter old) => !listEquals(old.stars, stars);
 }
 
 /// One level on the trail.
