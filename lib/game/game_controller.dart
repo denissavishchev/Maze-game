@@ -52,6 +52,13 @@ class Creature {
   double searchLeft = 0;
 
   bool get searching => target >= 0 || searchLeft > 0;
+
+  // Yeti: 0 patrolling, 1 following a trail, 2 chasing the ball it can see,
+  // 3 running to a cave to get away; the number of the footprint it is on (-1 none) and, while it is down a
+  // cave, the seconds before it comes up in another.
+  int mode = 0;
+  int trailId = -1;
+  double hiddenLeft = 0;
 }
 
 /// A timed danger on the floor. Boulders are only a warning marker until
@@ -192,6 +199,23 @@ class Crust {
   double level = 0;
 
   int get stage => min(3, (level * 4).floor());
+}
+
+/// Winter: a footprint in the snow, numbered in the order they were made. A
+/// yeti that finds one follows the next numbers to the ball.
+class Track {
+  Track(this.pos, this.id);
+
+  final Offset pos;
+  final int id;
+  double age = 0;
+}
+
+/// Winter: a cave the yetis come out of and vanish into.
+class Cave {
+  const Cave(this.pos);
+
+  final Offset pos;
 }
 
 /// Factory: a conveyor belt across a stretch of corridor. It carries the ball
@@ -622,6 +646,52 @@ class GameController extends ChangeNotifier {
   /// The eruption (counted per geyser) that already threw the ball.
   final Map<Geyser, int> _thrownAt = {};
 
+  /// Winter: per cell deep snow (true) or bare ice (false), the caves, the
+  /// footprints and the blizzard. [blizzard] is how much of the view is lost,
+  /// 0 to 1, easing in and out.
+  List<bool> snow = const [];
+  List<Cave> caves = [];
+  List<Track> tracks = [];
+  int _trackId = 0;
+  Offset? _lastTrack;
+  double blizzard = 0;
+  double blizzardWarnLeft = 0;
+  double blizzardLeft = 0;
+  double _blizzardTimer = 0;
+
+  /// A third of the maze is ice, in a few patches; the rest is snow.
+  static const double iceShare = 0.3;
+
+  /// Snow drags at the ball and caps its speed; ice lets it slide on and
+  /// answers the tilt only slowly.
+  static const double snowDrag = 5.0;
+  static const double snowSpeed = 2.2;
+  static const double iceDragFactor = 0.3;
+  static const double iceSpeed = 4.6;
+  static const double iceGrip = 0.55;
+
+  /// A footprint every this far, a blizzard warns this long before it blows.
+  static const double trackSpacing = 0.3;
+  static const double blizzardWarning = 2.0;
+
+  /// Yetis: how far one sees the ball (less in a blizzard), how far from a
+  /// footprint it picks the trail up, the longest gap in a trail it can
+  /// cross, how much faster it runs on a trail or after a ball it sees, how
+  /// much slower on ice, how close it must come to catch the ball and how
+  /// long it stays down a cave.
+  static const double yetiSight = 2.2;
+  static const double yetiBlindSight = 1.2;
+  static const double yetiTrailReach = 1.0;
+  static const double yetiTrailGap = 1.2;
+  static const double yetiRun = 1.8;
+  static const double yetiPatrol = 0.7;
+  static const double yetiIceSlow = 0.75;
+  static const double yetiCatch = 0.45;
+  static const double yetiCaveStay = 1.2;
+
+  /// Whether the floor at [p] is deep snow (false: ice, or not winter).
+  bool snowAt(Offset p) => snow.isNotEmpty && snow[maze.cellAt(p)];
+
   /// Lava warns this long before it floods; it kills within [lavaLength] along
   /// the corridor and [lavaWidth] across it.
   static const double lavaWarning = 0.9;
@@ -920,6 +990,9 @@ class GameController extends ChangeNotifier {
     geysers = [];
     crusts = [];
     if (config.world == WorldKind.volcano) _placeVolcano();
+    snow = const [];
+    caves = [];
+    if (config.world == WorldKind.winter) _placeWinter();
     continuesUsed = 0;
     _lostHere = false;
     restart();
@@ -1274,6 +1347,66 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Winter: ice in a few connected patches (one of them on the way to the
+  /// exit, so every run meets some), snow everywhere else, and the caves the
+  /// yetis use, spread out and away from the start.
+  void _placeWinter() {
+    snow = List<bool>.filled(maze.cellCount, true);
+    final open = List<bool>.filled(maze.gateCount, true);
+    final keep = {maze.start, maze.goal};
+    final route = [
+      for (final c in maze.solution)
+        if (!keep.contains(c)) c,
+    ];
+    final spots = [
+      for (var c = 1; c < maze.cellCount; c++)
+        if (!keep.contains(c)) c,
+    ]..shuffle(_rnd);
+    final seeds = <int>[if (route.isNotEmpty) route[route.length ~/ 2]];
+    for (final c in spots) {
+      if (seeds.length >= 3) break;
+      if (!seeds.contains(c)) seeds.add(c);
+    }
+    var ice = 0;
+    for (final c in seeds) {
+      snow[c] = false;
+      ice++;
+    }
+    final want = (maze.cellCount * iceShare).round();
+    final queues = [for (final c in seeds) [c]];
+    var grew = true;
+    while (ice < want && grew) {
+      grew = false;
+      for (final q in queues) {
+        if (q.isEmpty || ice >= want) continue;
+        grew = true;
+        final c = q.removeAt(0);
+        for (final (n, e) in maze.neighbours(c)) {
+          if (ice >= want) break;
+          if (!snow[n] || keep.contains(n) || !maze.passable(e, open)) continue;
+          snow[n] = false;
+          ice++;
+          q.add(n);
+        }
+      }
+    }
+
+    final start = maze.cellCenter(maze.start);
+    final special = {...keep, ...maze.buttonCells};
+    final sites = [
+      for (final c in spots)
+        if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 4) c,
+    ];
+    for (final spacing in [4.0, 3.0, 2.0, 1.2]) {
+      for (final c in sites) {
+        if (caves.length >= config.caveCount) break;
+        final p = maze.cellCenter(c);
+        if (caves.any((k) => (k.pos - p).distance < spacing)) continue;
+        caves.add(Cave(p));
+      }
+    }
+  }
+
   /// Same maze, everything back to its starting state.
   void restart() {
     gateOpen = List<bool>.filled(maze.gateCount, false);
@@ -1331,6 +1464,13 @@ class GameController extends ChangeNotifier {
     _beamTimer = config.beamInterval;
     _beamNoticed = false;
     _volcanoClock = 0;
+    tracks = [];
+    _trackId = 0;
+    _lastTrack = null;
+    blizzard = 0;
+    blizzardWarnLeft = 0;
+    blizzardLeft = 0;
+    _blizzardTimer = config.blizzardInterval;
     _resetSpin();
     _thrownAt.clear();
     _factoryClock = 0;
@@ -1372,7 +1512,8 @@ class GameController extends ChangeNotifier {
   List<Creature> _spawnCreatures() {
     if (config.world != WorldKind.forest &&
         config.world != WorldKind.city &&
-        config.world != WorldKind.graveyard) {
+        config.world != WorldKind.graveyard &&
+        config.world != WorldKind.winter) {
       return [];
     }
     final special = {maze.start, maze.goal, ...maze.buttonCells};
@@ -1386,7 +1527,8 @@ class GameController extends ChangeNotifier {
         Creature(
           maze.cellCenter(c),
           cell: c,
-          asleep: true,
+          // A yeti never sleeps.
+          asleep: config.world != WorldKind.winter,
           phase: _rnd.nextDouble() * 6,
         ),
     ];
@@ -1794,7 +1936,11 @@ class GameController extends ChangeNotifier {
     // A gentler response at small tilts, so a slow sneak is possible.
     final tiltPower = tilt.distance;
     final eased = tiltPower < 1e-6 ? Offset.zero : tilt * pow(tiltPower, 0.6).toDouble();
-    vel += eased * (_accel * ball.accel * dt);
+    // Winter: deep snow drags, ice slides.
+    final wintry = config.world == WorldKind.winter && !ball.floats;
+    final snowy = wintry && snowAt(pos);
+    final icy = wintry && !snowy;
+    vel += eased * (_accel * ball.accel * dt * (icy ? iceGrip : 1.0));
     if (windLeft > 0 && !(config.world == WorldKind.ocean && bonusLeft > 0)) {
       vel += windDir * (config.windStrength * (1 - ball.windResist) * dt);
     }
@@ -1824,12 +1970,27 @@ class GameController extends ChangeNotifier {
     // Cold fog drags at the ball, though it never stops it.
     final cold = !ball.floats && fog.any((f) => (f.pos - pos).distance < f.radius);
     final sticky = !ball.floats && goos.any(_underGoo);
-    vel *= exp(-(muddy ? 7.0 : sticky ? 6.5 : cold ? 4.2 : 1.7 * ball.damping) * dt);
+    vel *= exp(-(muddy
+            ? 7.0
+            : sticky
+                ? 6.5
+                : cold
+                    ? 4.2
+                    : snowy
+                        ? snowDrag
+                        : icy
+                            ? iceDragFactor * ball.damping
+                            : 1.7 * ball.damping) *
+        dt);
     final cap = muddy
         ? 1.8
         : sticky
             ? 1.3
-            : _maxSpeed * ball.maxSpeed * (cold ? 0.5 : 1.0);
+            : snowy
+                ? snowSpeed
+                : icy
+                    ? min(iceSpeed, _maxSpeed * ball.maxSpeed)
+                    : _maxSpeed * ball.maxSpeed * (cold ? 0.5 : 1.0);
     if (vel.distance > cap) vel = vel / vel.distance * cap;
 
     final steps = max(1, (vel.distance * dt / 0.07).ceil());
@@ -1967,6 +2128,12 @@ class GameController extends ChangeNotifier {
       case WorldKind.ocean:
       case WorldKind.factory:
       case WorldKind.candy:
+      case WorldKind.winter:
+        // The whistle: the blizzard dies down and the nearest yeti runs for
+        // the nearest cave and comes up in another one.
+        blizzardLeft = 0;
+        blizzardWarnLeft = 0;
+        _scareYeti();
       case WorldKind.shifting:
         break; // the light, the stabilizer and the prism work through [bonusLeft]
     }
@@ -2014,6 +2181,8 @@ class GameController extends ChangeNotifier {
     hazards = [];
     cracks = [];
     beams = [];
+    tracks = [];
+    _lastTrack = null;
     creatures = hazardsEnabled ? _spawnCreatures() : [];
     _mercy = 3;
     _invulnerable = 3;
@@ -2263,6 +2432,8 @@ class GameController extends ChangeNotifier {
         _updateFactory(dt);
       case WorldKind.shifting:
         _updateDoors(dt);
+      case WorldKind.winter:
+        _updateWinter(dt);
       case WorldKind.graveyard:
         for (final g in creatures) {
           if (g.lockLeft > 0) {
@@ -2707,6 +2878,260 @@ class GameController extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  // ---- winter -----------------------------------------------------------
+
+  void _updateWinter(double dt) {
+    _updateBlizzard(dt);
+    _updateTracks(dt);
+    for (final y in creatures) {
+      if (status != GameStatus.playing) break;
+      _updateYeti(y, dt);
+    }
+  }
+
+  /// Now and then a blizzard: a warning, then a few seconds of whiteout that
+  /// bury every footprint.
+  void _updateBlizzard(double dt) {
+    if (bonusLeft > 0) {
+      // The whistle clears the air; the next blizzard waits.
+      blizzardLeft = 0;
+      blizzardWarnLeft = 0;
+      _blizzardTimer = max(_blizzardTimer, 5.0);
+    } else if (blizzardLeft > 0) {
+      blizzardLeft -= dt;
+      if (blizzardLeft <= 0) {
+        _blizzardTimer = config.blizzardInterval * (0.8 + 0.4 * _rnd.nextDouble());
+      }
+    } else if (blizzardWarnLeft > 0) {
+      blizzardWarnLeft -= dt;
+      if (blizzardWarnLeft <= 0) blizzardLeft = config.blizzardSeconds;
+    } else {
+      _blizzardTimer -= dt;
+      if (_blizzardTimer <= 0) {
+        blizzardWarnLeft = blizzardWarning;
+        notice = 'notice.blizzard';
+        noticeArgs = const {};
+        noticeLeft = blizzardWarning;
+      }
+    }
+    final target = blizzardLeft > 0 ? 1.0 : (blizzardWarnLeft > 0 ? 0.3 : 0.0);
+    blizzard += (target - blizzard) * min(1.0, dt * 1.5);
+  }
+
+  /// A ball rolling over snow leaves a footprint every [trackSpacing]; they
+  /// melt after a few seconds, ice keeps none (so a trail breaks there), and a
+  /// blizzard buries them all.
+  void _updateTracks(double dt) {
+    for (final t in tracks) {
+      t.age += dt;
+    }
+    tracks.removeWhere((t) => t.age > config.trackSeconds);
+    if (blizzardLeft > 0) {
+      tracks.clear();
+      _lastTrack = null;
+      return;
+    }
+    if (ball.floats || !snowAt(pos)) {
+      _lastTrack = null;
+      return;
+    }
+    final last = _lastTrack;
+    if (last == null || (pos - last).distance >= trackSpacing) {
+      tracks.add(Track(pos, _trackId++));
+      _lastTrack = pos;
+      if (tracks.length > 400) tracks.removeAt(0);
+    }
+  }
+
+  /// A yeti never sleeps. It wanders the corridors and sometimes goes down a
+  /// cave to come up in another; once it crosses a footprint it follows the
+  /// trail to the ball, much faster; and it runs straight at a ball it sees.
+  void _updateYeti(Creature y, double dt) {
+    if (y.hiddenLeft > 0) {
+      y.hiddenLeft -= dt;
+      if (y.hiddenLeft <= 0) _emerge(y);
+      return;
+    }
+    y.age += dt;
+    final base = config.chaserSpeed * (snowAt(y.pos) ? 1.0 : yetiIceSlow);
+    if (y.mode == 3) {
+      // Running for a cave, no matter what: it does not catch the ball now.
+      if (y.route.isNotEmpty) {
+        final to = y.route.first - y.pos;
+        if (to.distance > 1e-6) y.angle = to.direction;
+        _walk(y, dt, base * yetiRun);
+      }
+      if (y.route.isEmpty) {
+        y.mode = 0;
+        y.hiddenLeft = yetiCaveStay;
+        bursts.add(Burst(y.pos, 2));
+      }
+      return;
+    }
+    final sight = blizzardLeft > 0 ? yetiBlindSight : yetiSight;
+    final sees = _invulnerable <= 0 &&
+        (y.pos - pos).distance < sight &&
+        _lineClear(y.pos, pos);
+
+    void switchTo(int mode) {
+      if (y.mode == mode) return;
+      y.mode = mode;
+      y.route.clear();
+      y.target = -1;
+      y.cell = maze.cellAt(y.pos);
+      y.prevCell = -1;
+    }
+
+    if (sees) {
+      switchTo(2);
+      y.trailId = -1;
+      _followPath(y, dt, base * yetiRun);
+    } else if (y.mode != 0 || y.trailId >= 0 || _findTrail(y) != null) {
+      if (_followTrail(y, dt, base * yetiRun)) {
+        switchTo(1);
+      } else {
+        y.trailId = -1;
+        switchTo(0);
+      }
+    } else {
+      switchTo(0);
+    }
+    if (y.mode == 0) _wander(y, dt, base * yetiPatrol);
+    if (y.mode == 2 && !sees) switchTo(0);
+    if ((y.pos - pos).distance < yetiCatch) _lose('lose.yeti');
+  }
+
+  /// The whistle: the yeti nearest the ball runs for the cave closest by way
+  /// of the corridors (down it goes at once when none can be reached) and
+  /// comes up in another.
+  void _scareYeti() {
+    Creature? near;
+    var best = double.infinity;
+    for (final y in creatures) {
+      if (y.hiddenLeft > 0) continue;
+      final d = (y.pos - pos).distance;
+      if (d < best) {
+        best = d;
+        near = y;
+      }
+    }
+    if (near == null) return;
+    final y = near;
+    y.route.clear();
+    y.trailId = -1;
+    y.target = -1;
+    final from = maze.cellAt(y.pos);
+    List<int>? shortest;
+    for (final cave in caves) {
+      final to = maze.cellAt(cave.pos);
+      final p = from == to ? [from] : maze.path(from, to, gateOpen);
+      if (p != null && (shortest == null || p.length < shortest.length)) shortest = p;
+    }
+    if (shortest == null) {
+      y.mode = 0;
+      y.hiddenLeft = yetiCaveStay;
+      bursts.add(Burst(y.pos, 2));
+      return;
+    }
+    y.route.addAll(maze.routePoints(shortest).skip(1));
+    y.mode = 3;
+  }
+
+  /// The nearest footprint within reach, or null.
+  Track? _findTrail(Creature y) {
+    Track? best;
+    var bestD = yetiTrailReach;
+    for (final t in tracks) {
+      final d = (t.pos - y.pos).distance;
+      if (d < bestD && _lineClear(y.pos, t.pos)) {
+        best = t;
+        bestD = d;
+      }
+    }
+    if (best != null) y.trailId = best.id;
+    return best;
+  }
+
+  /// Walks along the footprints, oldest to newest; false when the trail ends
+  /// (melted, buried, or broken by ice).
+  bool _followTrail(Creature y, double dt, double speed) {
+    if (y.trailId < 0 && _findTrail(y) == null) return false;
+    var budget = speed * dt;
+    while (budget > 1e-9) {
+      Track? next;
+      for (final t in tracks) {
+        if (t.id > y.trailId) {
+          next = t;
+          break;
+        }
+      }
+      if (next == null || (next.pos - y.pos).distance > yetiTrailGap) return false;
+      final d = next.pos - y.pos;
+      final dist = d.distance;
+      if (dist > 1e-6) y.angle = d.direction;
+      if (dist <= budget) {
+        y.pos = next.pos;
+        y.trailId = next.id;
+        budget -= dist;
+      } else {
+        y.pos += d / dist * budget;
+        budget = 0;
+      }
+    }
+    return true;
+  }
+
+  /// Patrol: from cell to cell at random, now and then to a cave.
+  void _wander(Creature y, double dt, double speed) {
+    if (y.route.isEmpty && y.target >= 0) {
+      y.hiddenLeft = yetiCaveStay;
+      y.target = -1;
+      bursts.add(Burst(y.pos, 2));
+      return;
+    }
+    if (y.route.isEmpty && caves.length >= 2 && _rnd.nextDouble() < 0.3) {
+      final cave = caves[_rnd.nextInt(caves.length)];
+      final to = maze.cellAt(cave.pos);
+      final from = maze.cellAt(y.pos);
+      final p = from == to ? null : maze.path(from, to, gateOpen);
+      if (p != null) {
+        y.route.addAll(maze.routePoints(p).skip(1));
+        y.target = to;
+        y.cell = to;
+      }
+    }
+    if (y.route.isNotEmpty) {
+      final to = y.route.first - y.pos;
+      if (to.distance > 1e-6) y.angle = to.direction;
+      _walk(y, dt, speed);
+    } else {
+      _patrol(y, dt, speed);
+    }
+  }
+
+  /// Up out of another cave, never one right beside the ball when there is a
+  /// choice.
+  void _emerge(Creature y) {
+    if (caves.isEmpty) return;
+    final away = [
+      for (final c in caves)
+        if ((c.pos - y.pos).distance > 0.5) c,
+    ];
+    final options = away.isEmpty ? caves : away;
+    final far = [
+      for (final c in options)
+        if ((c.pos - pos).distance > 1.5) c,
+    ];
+    final pool = far.isEmpty ? options : far;
+    y.pos = pool[_rnd.nextInt(pool.length)].pos;
+    y.cell = maze.cellAt(y.pos);
+    y.prevCell = -1;
+    y.mode = 0;
+    y.trailId = -1;
+    y.route.clear();
+    bursts.add(Burst(y.pos, 2));
   }
 
   // ---- glass ------------------------------------------------------------

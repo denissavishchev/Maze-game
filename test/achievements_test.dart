@@ -164,13 +164,14 @@ void main() {
     expect(a.has('laser_dancer'), isTrue);
   });
 
-  test('world tour needs all thirteen worlds', () {
+  test('world tour needs all the worlds', () {
     final a = Achievements.instance;
-    for (final w in WorldKind.values.take(12)) {
+    final n = WorldKind.values.length;
+    for (final w in WorldKind.values.take(n - 1)) {
       a.worldWon(w);
     }
     expect(a.has('world_tour'), isFalse);
-    expect(a.progress('world_tour'), (12, 13));
+    expect(a.progress('world_tour'), (n - 1, n));
     a.worldWon(WorldKind.values.last);
     expect(a.has('world_tour'), isTrue);
   });

@@ -32,7 +32,7 @@ void main() {
     ];
     expect(all.toSet(), BallKind.values.toSet());
     expect(all.length, 9);
-    expect(BallCollection.starsNeeded, 190);
+    expect(BallCollection.starsNeeded, 204);
   });
 
   test('every story level offers at least one starter ball', () {
@@ -46,12 +46,12 @@ void main() {
 
   test('a finished chapter gives its ball, once', () async {
     final p = StoryProgress.instance;
-    for (var n = 0; n < 12; n++) {
+    for (var n = 0; n < StoryLevel.perChapter - 1; n++) {
       await p.record(n, 1, 1000);
     }
     expect(await BallCollection.instance.grantRewards(p), isEmpty,
         reason: 'one level of the chapter is still missing');
-    await p.record(12, 1, 1000);
+    await p.record(StoryLevel.perChapter - 1, 1, 1000);
     expect(await BallCollection.instance.grantRewards(p), [BallKind.steel]);
     expect(BallCollection.instance.owns(BallKind.steel), isTrue);
     expect(await BallCollection.instance.grantRewards(p), isEmpty);
@@ -60,9 +60,9 @@ void main() {
   test('nearly all the stars give the last ball', () async {
     final p = StoryProgress.instance;
     for (var i = 0; i < StoryLevel.count; i++) {
-      await p.record(i, i < 63 ? 3 : 0 + 1, 1000);
+      await p.record(i, i < 67 ? 3 : 1, 1000);
     }
-    expect(p.totalStars, 63 * 3 + 2);
+    expect(p.totalStars, BallCollection.starsNeeded);
     final fresh = await BallCollection.instance.grantRewards(p);
     expect(fresh, contains(BallKind.chameleon));
     expect(fresh, containsAll(BallCollection.chapterRewards));

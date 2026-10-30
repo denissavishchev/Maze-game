@@ -1,7 +1,7 @@
 import '../l10n/strings.dart';
 import 'ball.dart';
 
-enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass, ocean, volcano, factory, candy, shifting }
+enum WorldKind { forest, mud, mountains, underground, city, space, graveyard, glass, ocean, volcano, factory, candy, shifting, winter }
 
 /// A chosen world and one of five levels. The level sets everything that
 /// makes the game harder: maze size, number of buttons (and gates), number of
@@ -152,6 +152,15 @@ class GameConfig {
   int get doorCount => _pick(const [10, 14, 18, 22, 26]);
   double get doorOpenSeconds => _pick(const [6.5, 6.0, 5.5, 5.0, 4.5]);
   double get doorClosedSeconds => _pick(const [4.0, 4.5, 5.0, 5.5, 6.0]);
+
+  /// Winter: caves the yetis come out of (and vanish into), seconds before a
+  /// footprint in the snow melts away, and the blizzard: seconds between
+  /// one and the next, and how long one blows. The yetis are the same
+  /// patrollers as the wolves ([chaserCount]).
+  int get caveCount => _pick(const [2, 2, 3, 3, 4]);
+  double get trackSeconds => _pick(const [9.0, 8.0, 7.0, 6.0, 5.0]);
+  double get blizzardInterval => _pick(const [32.0, 28.0, 25.0, 22.0, 20.0]);
+  double get blizzardSeconds => _pick(const [5.0, 5.5, 6.0, 6.5, 7.0]);
 
   /// Underground: how far the ball lights the way.
   double get lightRadius => _pick(const [3.6, 3.2, 2.9, 2.6, 2.3]);

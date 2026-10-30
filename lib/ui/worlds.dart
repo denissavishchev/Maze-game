@@ -295,6 +295,23 @@ WorldTheme themeFor(WorldKind kind) => switch (kind) {
           panelBottom: Color(0xEE19113A),
           accent: Color(0xFFA98BFF),
         ),
+      WorldKind.winter => const WorldTheme(
+          id: 'winter',
+          icon: Icons.severe_cold_rounded,
+          bg: Color(0xFF0D1B33),
+          floor: Color(0xFFB9DDF2),
+          floorDark: Color(0xFF86B8D8),
+          wallBase: Color(0xFF1C3A63),
+          wallMain: Color(0xFF5E93C6),
+          wallHi: Color(0xFFF2FAFF),
+          gate: Color(0xFFE0A050),
+          scenery: Scenery.snowPines,
+          wallStyle: WallStyle.snowRock,
+          floorStyle: FloorStyle.ice,
+          panelTop: Color(0xEE284B73),
+          panelBottom: Color(0xEE12233E),
+          accent: Color(0xFF8ED8FF),
+        ),
     };
 
 /// Level-specific numbers for the select screen.
@@ -327,6 +344,11 @@ String hazardNote(GameConfig c) {
     WorldKind.candy =>
         tr('note.candy', {'c': c.gooCount, 'g': c.jellyCount, 'w': c.wormCount}),
     WorldKind.shifting => tr('note.shifting', {'d': c.doorCount}),
+    WorldKind.winter => tr('note.winter', {
+        'y': k,
+        'c': c.caveCount,
+        's': c.trackSeconds.toStringAsFixed(0),
+      }),
     WorldKind.glass => tr('note.glass', {'l': c.beamInterval.toStringAsFixed(1), 's': c.crumbleSeconds.toStringAsFixed(1)}),
     WorldKind.space => tr('note.space', {'l': c.laserCount, 'a': c.airlockCount, 'c': c.cameraCount}),
     WorldKind.mountains => n == 1

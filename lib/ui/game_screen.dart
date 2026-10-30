@@ -581,6 +581,7 @@ class _BonusButton extends StatelessWidget {
         WorldKind.factory => Icons.front_hand_rounded,
         WorldKind.candy => Icons.eco_rounded,
         WorldKind.shifting => Icons.visibility_rounded,
+        WorldKind.winter => Icons.campaign_rounded,
       };
 
   @override

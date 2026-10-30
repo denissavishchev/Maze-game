@@ -42,6 +42,35 @@ class MazeRender {
   Path _fog = Path();
   int _fogCount = -1;
 
+  Path _snow = Path();
+  List<bool>? _snowSource;
+
+  /// Winter: the snow as one shape, a line through every snow cell and every
+  /// open passage between two of them, stroked as wide as a corridor.
+  Path snowFor(GameController game) {
+    if (identical(_snowSource, game.snow)) return _snow;
+    _snowSource = game.snow;
+    final path = Path();
+    if (game.snow.length != maze.cellCount) return _snow = path;
+    final open = List<bool>.filled(maze.gateCount, true);
+    for (var c = 0; c < maze.cellCount; c++) {
+      if (!game.snow[c]) continue;
+      final p = maze.cellCenter(c);
+      path
+        ..moveTo(p.dx, p.dy)
+        ..lineTo(p.dx, p.dy + 0.001);
+      for (final (n, e) in maze.neighbours(c)) {
+        if (n < c || !game.snow[n] || !maze.passable(e, open)) continue;
+        final pts = maze.routePoints([c, n]);
+        path.moveTo(pts.first.dx, pts.first.dy);
+        for (final q in pts.skip(1)) {
+          path.lineTo(q.dx, q.dy);
+        }
+      }
+    }
+    return _snow = path;
+  }
+
   /// The explored part of the maze as one shape, rebuilt only when the ball
   /// uncovers new cells. Each cell is slightly enlarged so its walls show.
   Path fogFor(GameController game) {
@@ -134,6 +163,13 @@ class GamePainter extends CustomPainter {
     } else {
       canvas.drawPicture(render.picture);
     }
+    if (game.config.world == WorldKind.winter) {
+      _snow(canvas);
+      _tracks(canvas);
+      for (final cave in game.caves) {
+        _cave(canvas, cave);
+      }
+    }
     for (final m in game.mud) {
       _mud(canvas, m, t);
     }
@@ -211,6 +247,8 @@ class GamePainter extends CustomPainter {
         _ghost(canvas, c, t);
       } else if (game.config.world == WorldKind.forest) {
         c.asleep ? _sleepingWolf(canvas, c, t) : _wolf(canvas, c);
+      } else if (game.config.world == WorldKind.winter) {
+        _yeti(canvas, c, t);
       } else {
         _drone(canvas, c, t);
       }
@@ -249,6 +287,13 @@ class GamePainter extends CustomPainter {
           ),
       );
     }
+
+    if (game.config.world == WorldKind.winter) {
+      final center = maze is RectMaze
+          ? origin + game.pos * s
+          : size.center(Offset.zero);
+      _winterAir(canvas, size, t, center, s);
+    }
   }
 
   /// Streaks flying across the screen with the wind: faint while it is only a
@@ -272,6 +317,179 @@ class GamePainter extends CustomPainter {
       );
       final p = base + dir * ((phase - 0.5) * size.width * 1.3);
       c.drawLine(p, p + dir * len, paint);
+    }
+  }
+
+  // ---- winter -----------------------------------------------------------
+
+  /// The deep snow: a white carpet along the corridors, bluish where it
+  /// shades itself. Ice is the bare floor.
+  void _snow(Canvas c) {
+    final path = render.snowFor(game);
+    Paint line(double w, Color color) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = w
+      ..color = color;
+    c.save();
+    c.translate(0.03, 0.05);
+    c.drawPath(path, line(0.5, const Color(0xFF3D6A94).withValues(alpha: 0.4)));
+    c.restore();
+    c.drawPath(path, line(0.5, const Color(0xFFD9EAF7)));
+    c.drawPath(path, line(0.4, const Color(0xFFF4FAFF)));
+    c.drawPath(path, line(0.18, Colors.white.withValues(alpha: 0.9)));
+  }
+
+  /// Footprints, fading as they melt.
+  void _tracks(Canvas c) {
+    final life = game.config.trackSeconds;
+    for (final t in game.tracks) {
+      final k = (1 - t.age / life).clamp(0.0, 1.0);
+      c.drawCircle(t.pos, 0.075, Paint()..color = const Color(0xFF6F9CC4).withValues(alpha: 0.8 * k));
+      c.drawCircle(t.pos.translate(-0.02, -0.02), 0.035,
+          Paint()..color = Colors.white.withValues(alpha: 0.6 * k));
+    }
+  }
+
+  /// A cave drawn like a pictogram: a lump of snowy rock with a dark mouth, a
+  /// few cracks and a couple of stones at its foot. It is where the yetis go
+  /// down and come up.
+  void _cave(Canvas c, Cave cave) {
+    final p = cave.pos;
+    Offset at(double x, double y) => p.translate(x, y);
+    final outline = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.035
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round
+      ..color = Palette.ink;
+    c.drawOval(Rect.fromCenter(center: at(0.02, 0.17), width: 0.66, height: 0.14),
+        Paint()..color = Colors.black.withValues(alpha: 0.28));
+
+    // The rock.
+    final rock = Path()
+      ..moveTo(at(-0.3, 0.15).dx, at(-0.3, 0.15).dy)
+      ..lineTo(at(-0.3, 0.04).dx, at(-0.3, 0.04).dy)
+      ..lineTo(at(-0.22, -0.05).dx, at(-0.22, -0.05).dy)
+      ..lineTo(at(-0.1, -0.15).dx, at(-0.1, -0.15).dy)
+      ..lineTo(at(0.06, -0.17).dx, at(0.06, -0.17).dy)
+      ..lineTo(at(0.18, -0.07).dx, at(0.18, -0.07).dy)
+      ..lineTo(at(0.28, 0.0).dx, at(0.28, 0.0).dy)
+      ..lineTo(at(0.32, 0.06).dx, at(0.32, 0.06).dy)
+      ..lineTo(at(0.3, 0.15).dx, at(0.3, 0.15).dy)
+      ..close();
+    c.drawPath(rock, Paint()..color = const Color(0xFFEAF3FA));
+    c.drawPath(rock, outline);
+
+    // The mouth, with a pair of eyes glinting in it.
+    final mouth = Path()
+      ..moveTo(at(-0.1, 0.15).dx, at(-0.1, 0.15).dy)
+      ..lineTo(at(-0.1, 0.02).dx, at(-0.1, 0.02).dy)
+      ..quadraticBezierTo(at(-0.08, -0.1).dx, at(-0.08, -0.1).dy, at(0.0, -0.1).dx, at(0.0, -0.1).dy)
+      ..quadraticBezierTo(at(0.08, -0.09).dx, at(0.08, -0.09).dy, at(0.1, 0.04).dx, at(0.1, 0.04).dy)
+      ..lineTo(at(0.12, 0.15).dx, at(0.12, 0.15).dy)
+      ..close();
+    c.drawPath(mouth, Paint()..color = const Color(0xFF0A1424));
+    final glint = Paint()..color = const Color(0xFFFFE27A).withValues(alpha: 0.8);
+    c.drawCircle(at(-0.025, 0.04), 0.022, glint);
+    c.drawCircle(at(0.04, 0.04), 0.022, glint);
+
+    // Cracks in the rock.
+    void crack(Offset a, Offset b) => c.drawLine(a, b, outline..strokeWidth = 0.022);
+    crack(at(-0.2, 0.0), at(-0.15, 0.03));
+    crack(at(-0.13, -0.11), at(-0.18, -0.07));
+    crack(at(0.15, -0.06), at(0.2, -0.02));
+    crack(at(0.21, 0.07), at(0.26, 0.04));
+
+    // Two stones at the foot.
+    outline.strokeWidth = 0.03;
+    for (final (x, w) in [(-0.2, 0.1), (0.22, 0.12)]) {
+      final stone = RRect.fromRectAndRadius(
+          Rect.fromCenter(center: at(x, 0.16), width: w, height: 0.08), const Radius.circular(0.025));
+      c.drawRRect(stone, Paint()..color = const Color(0xFFEAF3FA));
+      c.drawRRect(stone, outline);
+    }
+  }
+
+  /// A shaggy white yeti seen from above: a big body, swinging arms, a head
+  /// in front with eyes that go red once it is on the hunt. Nothing is drawn
+  /// while it is down a cave.
+  void _yeti(Canvas c, Creature y, double t) {
+    if (y.hiddenLeft > 0) return;
+    final hunting = y.mode != 0;
+    final swing = sin(t * (hunting ? 13 : 6) + y.phase) * 0.07;
+    c.save();
+    c.translate(y.pos.dx, y.pos.dy);
+    c.drawOval(Rect.fromCenter(center: const Offset(0.05, 0.14), width: 0.7, height: 0.34),
+        Paint()..color = Colors.black.withValues(alpha: 0.3));
+    c.rotate(y.angle);
+    final ink = Paint()..color = Palette.ink;
+    final fur = Paint()..color = const Color(0xFFF1F7FC);
+    final shade = Paint()..color = const Color(0xFFB4CCE2);
+    void blob(Offset at, double w, double h, Paint p) {
+      c.drawOval(Rect.fromCenter(center: at, width: w + 0.05, height: h + 0.05), ink);
+      c.drawOval(Rect.fromCenter(center: at, width: w, height: h), p);
+    }
+
+    // Arms swing opposite each other.
+    blob(Offset(0.08 + swing, -0.25), 0.3, 0.13, shade);
+    blob(Offset(0.08 - swing, 0.25), 0.3, 0.13, shade);
+    // The body, with tufts of fur along its back.
+    blob(const Offset(-0.04, 0), 0.6, 0.48, fur);
+    for (var i = 0; i < 4; i++) {
+      c.drawCircle(Offset(-0.22 + i * 0.03, -0.14 + i * 0.09), 0.05, shade);
+    }
+    // Head, face and eyes.
+    blob(const Offset(0.3, 0), 0.34, 0.32, fur);
+    c.drawOval(Rect.fromCenter(center: const Offset(0.38, 0), width: 0.15, height: 0.2),
+        Paint()..color = const Color(0xFF365F86));
+    final eye = Paint()..color = hunting ? const Color(0xFFFF4A3A) : const Color(0xFFFFE27A);
+    c.drawCircle(const Offset(0.41, -0.05), 0.03, eye);
+    c.drawCircle(const Offset(0.41, 0.05), 0.03, eye);
+    c.restore();
+  }
+
+  /// Winter air: a few flakes always drifting down, and in a blizzard
+  /// streaks of snow flying across the screen and a whiteout that leaves only
+  /// the surroundings of the ball clear.
+  void _winterAir(Canvas c, Size size, double t, Offset center, double s) {
+    final flake = Paint()..color = Colors.white.withValues(alpha: 0.7);
+    for (var i = 0; i < 34; i++) {
+      final seed = (i + 1) * 0.6180339;
+      final fall = (t * (0.07 + (i % 5) * 0.02) + seed) % 1.0;
+      final x = (((seed * 9.13) % 1.0) + 0.03 * sin(t * 0.9 + i)) % 1.0;
+      c.drawCircle(Offset(x * size.width, fall * size.height), 1.2 + (i % 3) * 0.5, flake);
+    }
+    final k = game.blizzard;
+    if (k < 0.02) return;
+    c.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          center,
+          s * (14 - 11.4 * k),
+          [
+            Colors.transparent,
+            const Color(0xFFE6F1FB).withValues(alpha: 0.7),
+            const Color(0xFFEAF4FF).withValues(alpha: 0.97),
+          ],
+          [0.3, 0.62, 1],
+        ),
+    );
+    final streak = Paint()
+      ..color = Colors.white.withValues(alpha: 0.6 * k)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < 26; i++) {
+      final seed = (i + 1) * 0.6180339;
+      final phase = (t * 1.6 + seed) % 1.0;
+      final base = Offset(
+        ((seed * 7.13) % 1.0) * size.width,
+        ((seed * 3.77) % 1.0) * size.height,
+      );
+      final p = base + const Offset(1, 0.25) * ((phase - 0.5) * size.width * 1.4);
+      c.drawLine(p, p + const Offset(1, 0.25) * 70, streak);
     }
   }
 
@@ -580,6 +798,24 @@ class GamePainter extends CustomPainter {
             const Color(0xFFA98BFF).withValues(alpha: 0),
           ]));
         }
+      case WorldKind.winter:
+        // A frosted slab with a snowflake that glows until pressed.
+        disc(r + 0.03, const Color(0xFF244A72), const Color(0xFF12263E));
+        disc(r - 0.03, const Color(0xFF7FB2DA), const Color(0xFF4A7BA8));
+        final flake = Paint()
+          ..color = used ? const Color(0xFF5A7490) : Colors.white
+          ..strokeWidth = 0.04
+          ..strokeCap = StrokeCap.round;
+        for (var k = 0; k < 3; k++) {
+          final a = k * pi / 3;
+          c.drawLine(p + polar(0.17, a), p + polar(0.17, a + pi), flake);
+        }
+        if (!used) {
+          c.drawCircle(p, 0.3, Paint()..shader = ui.Gradient.radial(p, 0.3, [
+            const Color(0xFF8ED8FF).withValues(alpha: 0.45),
+            const Color(0xFF8ED8FF).withValues(alpha: 0),
+          ]));
+        }
       case WorldKind.volcano:
         // An obsidian plate with a flame that burns until pressed.
         disc(r + 0.03, const Color(0xFF2A1512), const Color(0xFF120807));
@@ -749,6 +985,12 @@ class GamePainter extends CustomPainter {
           ..quadraticBezierTo(p.dx, p.dy + 0.2, p.dx - 0.17, p.dy);
         c.drawPath(eye, line);
         c.drawCircle(p, 0.05, Paint()..color = Colors.white);
+      case WorldKind.winter:
+        // A whistle: the yeti runs home and the blizzard dies down.
+        c.drawCircle(p.translate(0.05, 0.03), 0.1, line);
+        c.drawLine(p.translate(-0.04, -0.03), p.translate(-0.17, -0.08), line);
+        c.drawLine(p.translate(-0.04, 0.03), p.translate(-0.17, 0.0), line);
+        c.drawCircle(p.translate(0.05, 0.03), 0.025, Paint()..color = Colors.white);
       case WorldKind.volcano:
         // A snowflake: the lava, the steam and the crust cool down.
         for (var i = 0; i < 3; i++) {

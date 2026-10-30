@@ -1,7 +1,7 @@
 import 'ball.dart';
 import 'world.dart';
 
-/// Story mode: 65 round mazes in five chapters, one chapter per maze size.
+/// Story mode: 70 round mazes in five chapters, one chapter per maze size.
 /// Every chapter visits all the worlds, from the gentlest to the hardest, so
 /// the game starts with small mazes and grows from there.
 class StoryLevel {
@@ -14,6 +14,7 @@ class StoryLevel {
     WorldKind.mud,
     WorldKind.candy,
     WorldKind.mountains,
+    WorldKind.winter,
     WorldKind.city,
     WorldKind.ocean,
     WorldKind.underground,
@@ -39,7 +40,7 @@ class StoryLevel {
   int get size => chapter;
   WorldKind get world => worldOrder[index % perChapter];
 
-  /// Position inside the chapter, 1..13.
+  /// Position inside the chapter, 1..14.
   int get number => index % perChapter + 1;
 
   bool get isLast => index == count - 1;
@@ -74,6 +75,7 @@ class StoryLevel {
     WorldKind.volcano: [BallKind.wood, BallKind.steel, BallKind.stone, BallKind.rubber, BallKind.slime, BallKind.glass],
     WorldKind.factory: [BallKind.wood, BallKind.rubber, BallKind.stone, BallKind.slime, BallKind.paper, BallKind.steel],
     WorldKind.shifting: [BallKind.wood, BallKind.rubber, BallKind.steel, BallKind.stone, BallKind.slime, BallKind.glass],
+    WorldKind.winter: [BallKind.stone, BallKind.steel, BallKind.wood, BallKind.rubber, BallKind.slime, BallKind.paper],
   };
 
   /// The balls the player may pick on this level.
@@ -112,6 +114,7 @@ class StoryLevel {
     WorldKind.volcano: 1.25,
     WorldKind.factory: 1.25,
     WorldKind.shifting: 1.35,
+    WorldKind.winter: 1.2,
   };
 
   /// Finish within this time for the second star.

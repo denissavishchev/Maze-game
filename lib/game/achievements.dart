@@ -36,7 +36,7 @@ final List<Achievement> achievementList = [
   Achievement('ghost_whisperer', Icons.nightlight_round, target: 1),
   Achievement('sneaky_wolf', Icons.pets_rounded, target: 1),
   Achievement('in_the_dark', Icons.light_mode_rounded, target: 1),
-  Achievement('world_tour', Icons.public_rounded, target: 13),
+  Achievement('world_tour', Icons.public_rounded, target: WorldKind.values.length),
   Achievement('big_maze_survivor', Icons.shield_rounded),
   Achievement('lava_walker', Icons.whatshot_rounded),
   Achievement('deep_diver', Icons.scuba_diving_rounded),
@@ -152,7 +152,7 @@ class Achievements extends ChangeNotifier {
     if (seconds <= level.greatSeconds * 0.8) unlock('speed_demon');
   }
 
-  /// A maze was won in [world]; all thirteen worlds make a world tour.
+  /// A maze was won in [world]; all the worlds make a world tour.
   void worldWon(WorldKind world) {
     final bits = counter('worlds') | (1 << world.index);
     if (bits != counter('worlds')) _count('worlds', bits);

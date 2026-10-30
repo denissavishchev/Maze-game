@@ -20,18 +20,20 @@ void main() {
     Vip.instance.on = false;
   });
 
-  test('65 levels: five chapters, each visiting all 13 worlds once', () {
-    expect(StoryLevel.count, 65);
+  test('70 levels: five chapters, each visiting all 14 worlds once', () {
+    const per = 14;
+    expect(StoryLevel.perChapter, per);
+    expect(StoryLevel.count, 5 * per);
     for (var c = 1; c <= 5; c++) {
       final worlds = [
-        for (var n = 0; n < 13; n++) StoryLevel((c - 1) * 13 + n).world,
+        for (var n = 0; n < per; n++) StoryLevel((c - 1) * per + n).world,
       ];
       expect(worlds.toSet(), WorldKind.values.toSet());
-      for (var n = 0; n < 13; n++) {
-        expect(StoryLevel((c - 1) * 13 + n).size, c, reason: 'size is the chapter');
+      for (var n = 0; n < per; n++) {
+        expect(StoryLevel((c - 1) * per + n).size, c, reason: 'size is the chapter');
       }
     }
-    expect(StoryLevel(64).next, isNull);
+    expect(StoryLevel(StoryLevel.count - 1).next, isNull);
   });
 
   test('3, 4, 5, then 6 balls; only the last two chapters offer the hard one', () {
@@ -46,7 +48,7 @@ void main() {
   });
 
   test('stars: one for finishing, then by time; the hard ball earns the third early', () {
-    final l = StoryLevel(13 * 3); // chapter 4
+    final l = StoryLevel(StoryLevel.perChapter * 3); // chapter 4
     final hard = l.hardBall!;
     expect(l.starsFor(l.goodSeconds + 1, BallKind.wood), 1);
     expect(l.starsFor(l.goodSeconds, BallKind.wood), 2);
@@ -62,10 +64,11 @@ void main() {
   });
 
   test('bigger mazes get longer times', () {
-    for (var n = 0; n < 13; n++) {
+    const per = 14;
+    for (var n = 0; n < per; n++) {
       for (var c = 1; c < 5; c++) {
-        expect(StoryLevel(c * 13 + n).goodSeconds,
-            greaterThan(StoryLevel((c - 1) * 13 + n).goodSeconds));
+        expect(StoryLevel(c * per + n).goodSeconds,
+            greaterThan(StoryLevel((c - 1) * per + n).goodSeconds));
       }
     }
   });
