@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orbyrinth/app_version.dart';
 import 'package:orbyrinth/audio/haptics.dart';
 import 'package:orbyrinth/audio/sfx.dart';
 import 'package:orbyrinth/audio/sound_setting.dart';
@@ -143,6 +146,26 @@ void main() {
     SoundSetting.instance.notifyListeners();
     await tester.pump(const Duration(milliseconds: 200));
     expect(tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed, isNull);
+  });
+
+  test('the version in settings is the one in pubspec.yaml', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, contains('\nversion: $appVersion+$appBuild\n'));
+  });
+
+  testWidgets('settings show the version and its date in every language', (tester) async {
+    const expected = {
+      AppLang.pl: 'Wersja $appVersion ($appBuild) · $appDate',
+      AppLang.en: 'Version $appVersion ($appBuild) · $appDate',
+      AppLang.ru: 'Версия $appVersion ($appBuild) · $appDate',
+    };
+    for (final lang in AppLang.values) {
+      AppLanguage.instance.lang = lang;
+      await show(tester);
+      AppLanguage.instance.notifyListeners();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text(expected[lang]!), findsOneWidget, reason: lang.name);
+    }
   });
 
   testWidgets('settings never overflow: small screens, large fonts, every language', (tester) async {

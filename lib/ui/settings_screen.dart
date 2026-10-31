@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../app_version.dart';
 import '../audio/haptics.dart';
 import '../audio/sfx.dart';
 import '../audio/sound_setting.dart';
@@ -88,6 +89,17 @@ class SettingsScreen extends StatelessWidget {
                         icon: Icons.workspace_premium_rounded,
                         title: tr('set.vip'),
                         child: _vip(),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        tr('set.version', {
+                          'version': appVersion,
+                          'build': appBuild,
+                          'date': appDate,
+                        }),
+                        key: const Key('app-version'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: Palette.sand),
                       ),
                     ],
                   ),

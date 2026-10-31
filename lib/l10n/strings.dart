@@ -127,6 +127,7 @@ const _tables = <AppLang, Map<String, String>>{
     'tt.restart': 'Restart',
     'set.privacy': 'Prywatność',
     'set.privacy_open': 'Polityka prywatności',
+    'set.version': 'Wersja {version} ({build}) · {date}',
     'set.calibration': 'Kalibracja',
     'set.calibration_info':
         'Przy starcie poziomu gra sama przyjmuje Twoje trzymanie telefonu za poziome. Jeśli kulka dryfuje, naciśnij Kalibruj w trakcie gry.',
@@ -402,6 +403,7 @@ const _tables = <AppLang, Map<String, String>>{
     'tt.restart': 'Restart',
     'set.privacy': 'Privacy',
     'set.privacy_open': 'Privacy policy',
+    'set.version': 'Version {version} ({build}) · {date}',
     'set.calibration': 'Calibration',
     'set.calibration_info':
         'When a level starts, the game takes the way you hold the phone as level. If the ball drifts, tap Calibrate during play.',
@@ -677,6 +679,7 @@ const _tables = <AppLang, Map<String, String>>{
     'tt.restart': 'Заново',
     'set.privacy': 'Конфиденциальность',
     'set.privacy_open': 'Политика конфиденциальности',
+    'set.version': 'Версия {version} ({build}) · {date}',
     'set.calibration': 'Калибровка',
     'set.calibration_info':
         'В начале уровня игра считает текущее положение телефона ровным. Если шарик дрейфует, нажмите «Калибровка» во время игры.',
