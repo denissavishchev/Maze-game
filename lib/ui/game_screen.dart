@@ -294,7 +294,7 @@ class _GameScreenState extends State<GameScreen>
 
   Widget _endCard(bool won) {
     final story = widget.story;
-    final next = story?.next;
+    final next = story == null ? null : StoryProgress.instance.nextAfter(story);
     return _EndCard(
       game: game,
       won: won,
@@ -304,7 +304,7 @@ class _GameScreenState extends State<GameScreen>
       nextOpen: next != null && StoryProgress.instance.isUnlocked(next),
       hasNext: next != null,
       onMap: () => _afterAd(() => Navigator.of(context).pop()),
-      onNext: () => _afterAd(() => Navigator.of(context).pop(story!.index + 1)),
+      onNext: () => _afterAd(() => Navigator.of(context).pop(next!.index)),
       onNewMaze: () => _afterAd(game.newMaze),
       onRetry: () => _afterAd(game.restart, always: true),
       onAgain: () => _afterAd(game.resetRun),

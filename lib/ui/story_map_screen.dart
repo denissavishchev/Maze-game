@@ -13,8 +13,18 @@ import 'kit.dart';
 import 'palette.dart';
 import 'worlds.dart';
 
-/// The story map: five chapters, one per maze size, each a winding trail of
-/// the 13 worlds. A level opens once enough stars have been collected.
+/// The story map: climbing towards the mirror through the five chapters, one
+/// per maze size. Each chapter is two trees of levels that fork into four
+/// lines, and only the four tips lead on to the next chapter. A closed chapter
+/// stays folded up until it opens. Outlines and lines all take their colour
+/// from [_colourOf].
+Color _colourOf(StoryState state) => switch (state) {
+      StoryState.locked => Palette.stoneDark,
+      StoryState.open => Palette.water,
+      StoryState.done => Palette.leaf,
+      StoryState.perfect => Palette.gold,
+    };
+
 class StoryMapScreen extends StatefulWidget {
   const StoryMapScreen({super.key});
 
@@ -23,6 +33,27 @@ class StoryMapScreen extends StatefulWidget {
 }
 
 class _StoryMapScreenState extends State<StoryMapScreen> {
+  final Map<int, GlobalKey> _chapterKeys = {
+    for (var c = 1; c <= StoryLevel.chapters; c++) c: GlobalKey(),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // The map starts at the foot of the tree; climb to the newest chapter.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      var current = 1;
+      for (var c = 2; c <= StoryLevel.chapters; c++) {
+        if (StoryProgress.instance.chapterOpen(c)) current = c;
+      }
+      final target = _chapterKeys[current]!.currentContext;
+      if (current > 1 && target != null) {
+        Scrollable.ensureVisible(target, alignment: 1);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: Listenable.merge([AppLanguage.instance, StoryProgress.instance]),
@@ -80,12 +111,33 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
                       ],
                     ),
                   ),
+                  const _Legend(),
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                      children: [
-                        for (var c = 1; c <= StoryLevel.chapters; c++) ..._chapter(c),
-                      ],
+                    child: SingleChildScrollView(
+                      // The tree is climbed from the bottom.
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      child: Column(
+                        children: [
+                          _Mirror(
+                            done: progress.chapterDone(StoryLevel.chapters),
+                          ),
+                          // Each chapter leads up only once it is finished.
+                          for (var c = StoryLevel.chapters; c >= 1; c--) ...[
+                            SizedBox(
+                              height: 18,
+                              width: double.infinity,
+                              child: CustomPaint(
+                                painter: _TrunkPainter(
+                                    progress.chapterDone(c)
+                                        ? progress.chapterState(c)
+                                        : StoryState.locked),
+                              ),
+                            ),
+                            KeyedSubtree(key: _chapterKeys[c], child: _chapter(c)),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -97,63 +149,118 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
     );
   }
 
-  List<Widget> _chapter(int chapter) {
-    final levels = [
-      for (var n = 0; n < StoryLevel.perChapter; n++)
-        StoryLevel((chapter - 1) * StoryLevel.perChapter + n),
-    ];
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
-        child: Text(
-          tr('story.chapter', {'n': chapter, 'size': tr('size.$chapter')}).toUpperCase(),
-          style: cartoon(14, spacing: 1.5, outline: 1.5, color: Palette.gold),
-        ),
+  /// One chapter, outlined in the colour of its state: its timelines above
+  /// the plate that names it.
+  Widget _chapter(int chapter) {
+    final progress = StoryProgress.instance;
+    final levels = StoryLevel.ofChapter(chapter);
+    final state = progress.chapterState(chapter);
+    final folded = state == StoryState.locked;
+    final colour = _colourOf(state);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Palette.panel,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colour, width: 3),
       ),
-      // Four nodes to a row, the trail snaking back and forth; the trail
-      // itself is drawn behind the nodes between levels that are done.
-      Stack(
+      child: Column(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _TrailPainter(
-                stars: [for (final l in levels) StoryProgress.instance.stars(l.index)],
+          SizedBox(
+            height: folded ? _TreePainter.foldedHeight : _TreePainter.height,
+            child: LayoutBuilder(
+              builder: (context, box) => Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _TreePainter(
+                        chapter: state,
+                        levels: [for (final l in levels) progress.levelState(l)],
+                      ),
+                    ),
+                  ),
+                  if (!folded)
+                    for (final l in levels)
+                      Positioned(
+                        left: _TreePainter.center(l, box.maxWidth).dx - 36,
+                        top: _TreePainter.center(l, box.maxWidth).dy -
+                            _TreePainter.nodeSize / 2,
+                        width: 72,
+                        child: _Node(level: l, onTap: _open),
+                      ),
+                ],
               ),
             ),
           ),
-          Column(
-            children: [
-              for (var r = 0; r * 4 < levels.length; r++)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: _TrailPainter.rowGap),
-                  child: Row(
-                    textDirection: r.isOdd ? TextDirection.rtl : TextDirection.ltr,
-                    children: [
-                      for (var k = 0; k < 4; k++)
-                        Expanded(
-                          child: r * 4 + k < levels.length
-                              ? _Node(level: levels[r * 4 + k], onTap: _open)
-                              : const SizedBox.shrink(),
-                        ),
-                    ],
-                  ),
+          GestureDetector(
+            key: Key('story-chapter-$chapter'),
+            onTap: folded ? () => _tellLocked(levels.first) : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Palette.wood, Palette.woodDark],
                 ),
-            ],
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colour, width: 2.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (folded) ...[
+                    const Icon(Icons.lock_rounded, color: Palette.sand, size: 16),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      tr('story.chapter', {'n': chapter, 'size': tr('size.$chapter')})
+                          .toUpperCase(),
+                      style: cartoon(14, spacing: 1.5, outline: 1.5, color: Palette.cream),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 18,
+            width: double.infinity,
+            // Nothing leads into the first chapter.
+            child: chapter == 1
+                ? null
+                : CustomPaint(painter: _TrunkPainter(state, under: _TreePainter.overlap)),
           ),
         ],
       ),
-    ];
+    );
+  }
+
+  /// Says what still keeps [level] closed.
+  void _tellLocked(StoryLevel level) {
+    final progress = StoryProgress.instance;
+    final String text;
+    if (level.chapter > 1 && !progress.chapterDone(level.chapter - 1)) {
+      text = tr('story.need_chapter', {'n': level.chapter - 1});
+    } else if (progress.missingStars(level) > 0) {
+      text = tr('story.need', {'n': progress.missingStars(level)});
+    } else {
+      text = tr('story.need_branch');
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        duration: const Duration(seconds: 2),
+      ));
   }
 
   Future<void> _open(StoryLevel level) async {
     final progress = StoryProgress.instance;
     if (!progress.isUnlocked(level)) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text(tr('story.need', {'n': progress.missingStars(level)})),
-          duration: const Duration(seconds: 2),
-        ));
+      _tellLocked(level);
       return;
     }
     final ball = await showModalBottomSheet<BallKind>(
@@ -176,60 +283,201 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
   }
 }
 
-/// The trail between levels that are done: a band from one node to the next
-/// along the snake, bending round at the end of each row. Each piece has the
-/// colour of the outline of the weaker of its two nodes: gold when both have
-/// all three stars, sand otherwise.
-class _TrailPainter extends CustomPainter {
-  const _TrailPainter({required this.stars});
+/// The mirror at the top of the tree, where the story ends.
+class _Mirror extends StatelessWidget {
+  const _Mirror({required this.done});
 
-  /// Stars of the chapter's levels, in order.
-  final List<int> stars;
-
-  static const double nodeSize = 62;
-  static const double rowHeight = 81; // the node, its gap and its stars
-  static const double rowGap = 10;
-  static const double width = 6;
+  final bool done;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final col = size.width / 4;
-    Offset center(int i) {
-      final r = i ~/ 4;
-      final k = i % 4;
-      final visual = r.isOdd ? 3 - k : k;
-      return Offset((visual + 0.5) * col, r * (rowHeight + rowGap) + nodeSize / 2);
-    }
+  Widget build(BuildContext context) => Container(
+        key: const Key('story-mirror'),
+        width: 70,
+        height: 70,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Palette.panel,
+          border: Border.all(color: done ? Palette.gold : Palette.stoneDark, width: 4),
+        ),
+        child: Icon(
+          Icons.auto_awesome_rounded,
+          color: done ? Palette.gold : Colors.white54,
+          size: 34,
+        ),
+      );
+}
 
-    for (var i = 0; i + 1 < stars.length; i++) {
-      if (stars[i] == 0 || stars[i + 1] == 0) continue;
-      final a = center(i);
-      final b = center(i + 1);
-      final both = stars[i] < stars[i + 1] ? stars[i] : stars[i + 1];
+/// What the colours of the map mean.
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 2,
+          children: [
+            for (final state in StoryState.values)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _colourOf(state),
+                      border: Border.all(color: Palette.ink, width: 1.5),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(tr('story.state.${state.name}'),
+                      style: const TextStyle(color: Palette.cream, fontSize: 11.5)),
+                ],
+              ),
+          ],
+        ),
+      );
+}
+
+/// One thick line of the map.
+class _Line {
+  const _Line(this.a, this.b, this.width, this.colour);
+
+  final Offset a;
+  final Offset b;
+  final double width;
+  final Color colour;
+}
+
+/// Draws lines that join up solidly: all the cartoon outlines first, then all
+/// the colours on top, so no outline ever cuts across a join. The trunk ends
+/// square, so that its pieces meet without a seam.
+void _drawLines(Canvas canvas, List<_Line> lines) {
+  for (final outline in [true, false]) {
+    for (final line in lines) {
       final paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = width
-        ..color = both == StoryLevel.maxStars ? Palette.gold : Palette.sand;
-      final path = Path()..moveTo(a.dx, a.dy);
-      if ((i + 1) % 4 == 0) {
-        // The end of a row: out to the side and round to the row below.
-        final out = (i ~/ 4).isEven ? 57.0 : -57.0;
-        path.cubicTo(a.dx + out, a.dy, b.dx + out, b.dy, b.dx, b.dy);
-      } else {
-        path.lineTo(b.dx, b.dy);
-      }
-      canvas.drawPath(
-          path, Paint()..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = width + 3..color = Palette.ink);
-      canvas.drawPath(path, paint);
+        ..strokeCap = line.width == _TreePainter.trunkWidth ? StrokeCap.butt : StrokeCap.round
+        ..strokeWidth = outline ? line.width + 3 : line.width
+        ..color = outline ? Palette.ink : line.colour;
+      canvas.drawLine(line.a, line.b, paint);
     }
+  }
+}
+
+/// A piece of trunk: between two chapters, or below a chapter's plate, running
+/// [under] on past its foot so that it crosses the frame in one piece.
+class _TrunkPainter extends CustomPainter {
+  const _TrunkPainter(this.state, {this.under = 0});
+
+  final StoryState state;
+  final double under;
+
+  @override
+  void paint(Canvas canvas, Size size) => _drawLines(canvas, [
+        _Line(Offset(size.width / 2, 0), Offset(size.width / 2, size.height + under),
+            _TreePainter.trunkWidth, _colourOf(state)),
+      ]);
+
+  @override
+  bool shouldRepaint(_TrunkPainter old) => old.state != state || old.under != under;
+}
+
+/// One chapter's lines. From a rail along the foot two first levels rise and
+/// fork into four straight lines, whose tips meet a rail along the top that
+/// leads on. The line up to a level has that level's colour; the top rail
+/// lights up only when the whole chapter is finished. A closed chapter shows
+/// only the trunk.
+class _TreePainter extends CustomPainter {
+  const _TreePainter({required this.chapter, required this.levels});
+
+  final StoryState chapter;
+
+  /// States of the chapter's levels, in order.
+  final List<StoryState> levels;
+
+  static const double nodeSize = 62;
+  static const double width = 6;
+  static const double trunkWidth = 10;
+
+  /// Rows of levels sit this far apart.
+  static const double rise = 88;
+
+  /// The top rail, the top row of levels and the rail along the foot.
+  static const double _railTop = 14;
+  static const double _rowTop = 60;
+  static const double _railFoot = 392;
+
+  static const double height = 410;
+  static const double foldedHeight = 26;
+
+  /// How far the trunk runs past the top of a chapter, across its frame.
+  static const double overlap = 8;
+
+  /// The middle of [level]'s node on a tree [w] wide: four columns of three
+  /// rows, with the first level of each tree under the middle of its fork.
+  static Offset center(StoryLevel level, double w) {
+    final i = level.number - 1;
+    final tree = i ~/ 7;
+    final j = i % 7;
+    final column = tree * 2 + (j == 0 ? 0.5 : (j > 3 ? 1.0 : 0.0));
+    final row = j == 0 ? 0 : (j > 3 ? j - 3 : j);
+    return Offset(w * (column + 0.5) / 4, _rowTop + (3 - row) * rise);
   }
 
   @override
-  bool shouldRepaint(_TrailPainter old) => !listEquals(old.stars, stars);
+  void paint(Canvas canvas, Size size) {
+    final mid = size.width / 2;
+    final colour = _colourOf(chapter);
+    if (chapter == StoryState.locked) {
+      _drawLines(canvas, [
+        _Line(Offset(mid, -overlap), Offset(mid, size.height), trunkWidth, colour),
+      ]);
+      return;
+    }
+    final foot = size.height - (height - _railFoot);
+    final left = size.width * 0.25;
+    final right = size.width * 0.75;
+
+    // The way in, along the foot.
+    final lines = [
+      _Line(Offset(mid, foot), Offset(mid, size.height), trunkWidth, colour),
+      _Line(Offset(left, foot), Offset(right, foot), width, colour),
+    ];
+
+    // The way out, along the top.
+    final finished = chapter == StoryState.done || chapter == StoryState.perfect;
+    final out = finished ? colour : _colourOf(StoryState.locked);
+    final first = size.width / 8;
+    lines.addAll([
+      _Line(Offset(mid, -overlap), Offset(mid, _railTop), trunkWidth, out),
+      _Line(Offset(first, _railTop), Offset(size.width - first, _railTop), width, out),
+    ]);
+
+    for (var i = 0; i < levels.length; i++) {
+      final level = StoryLevel(i);
+      final at = center(level, size.width);
+      final before = level.before;
+      final from = before == null ? Offset(at.dx, foot) : center(before, size.width);
+      lines.add(_Line(from, at, width, _colourOf(levels[i])));
+      if (level.afterwards.isEmpty) {
+        final done = levels[i] == StoryState.done || levels[i] == StoryState.perfect;
+        lines.add(_Line(at, Offset(at.dx, _railTop), width,
+            _colourOf(done ? levels[i] : StoryState.locked)));
+      }
+    }
+    _drawLines(canvas, lines);
+  }
+
+  @override
+  bool shouldRepaint(_TreePainter old) =>
+      old.chapter != chapter || !listEquals(old.levels, levels);
 }
 
-/// One level on the trail.
+/// One level on a line.
 class _Node extends StatelessWidget {
   const _Node({required this.level, required this.onTap});
 
@@ -261,10 +509,7 @@ class _Node extends StatelessWidget {
                     ? [theme.panelTop, theme.panelBottom]
                     : const [Color(0xFF555555), Color(0xFF333333)],
               ),
-              border: Border.all(
-                color: stars == 3 ? Palette.gold : Palette.ink,
-                width: stars == 3 ? 4 : 3.5,
-              ),
+              border: Border.all(color: _colourOf(progress.levelState(level)), width: 4),
               boxShadow: const [
                 BoxShadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 3)),
               ],
@@ -275,8 +520,17 @@ class _Node extends StatelessWidget {
               size: 30,
             ),
           ),
-          const SizedBox(height: 4),
-          _StarRow(stars: stars, size: 15, dim: !open),
+          const SizedBox(height: 2),
+          // A plate of their own, so the lines never run through the stars.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: Palette.ink,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: _colourOf(progress.levelState(level)), width: 1.5),
+            ),
+            child: _StarRow(stars: stars, size: 14, dim: !open),
+          ),
         ],
       ),
     );
@@ -299,7 +553,7 @@ class _StarRow extends StatelessWidget {
             Icon(
               Icons.star_rounded,
               size: size,
-              color: i < stars ? Palette.gold : Colors.black.withValues(alpha: dim ? 0.25 : 0.45),
+              color: i < stars ? Palette.gold : Colors.white.withValues(alpha: dim ? 0.12 : 0.28),
             ),
         ],
       );

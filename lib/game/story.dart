@@ -43,16 +43,38 @@ class StoryLevel {
   /// Position inside the chapter, 1..14.
   int get number => index % perChapter + 1;
 
-  bool get isLast => index == count - 1;
-  StoryLevel? get next => isLast ? null : StoryLevel(index + 1);
-
   GameConfig config(BallKind ball) => GameConfig(world, size, ball: ball);
 
-  /// Stars the player must already hold to open this level: nothing for the
-  /// first two, then one and a half per level that came before it. A player
-  /// who earns three stars everywhere is never held up; one who only ever
-  /// finishes has to go back and improve some times.
-  int get requiredStars => index < 2 ? 0 : (index * 3 / 2).ceil();
+  // ---- branches ---------------------------------------------------------
+
+  /// Every chapter is two trees side by side, cut from [worldOrder] in turn:
+  /// a first level that forks into two lines of three. The player picks the
+  /// way; a level opens with the one before it. This is, for each position in
+  /// a chapter, the position of the level before it.
+  static const List<int?> _before = [null, 0, 1, 2, 0, 4, 5, null, 7, 8, 9, 7, 11, 12];
+
+  /// The level before this one (null at the foot of a tree).
+  StoryLevel? get before {
+    final b = _before[number - 1];
+    return b == null ? null : StoryLevel(index - (number - 1) + b);
+  }
+
+  /// The levels this one opens: two at a fork, none at the tip of a line.
+  List<StoryLevel> get afterwards => [
+        for (var n = 0; n < perChapter; n++)
+          if (_before[n] == number - 1) StoryLevel(index - (number - 1) + n),
+      ];
+
+  /// The levels of chapter 1..5.
+  static List<StoryLevel> ofChapter(int chapter) => [
+        for (var n = 0; n < perChapter; n++) StoryLevel((chapter - 1) * perChapter + n),
+      ];
+
+  /// Stars the player must already hold to open this level's chapter: one and
+  /// a half per level of the chapters before it. A player who earns three
+  /// stars everywhere is never held up; one who only ever finishes has to go
+  /// back and improve some times.
+  int get requiredStars => ((chapter - 1) * perChapter * 3 / 2).ceil();
 
   // ---- balls ------------------------------------------------------------
 

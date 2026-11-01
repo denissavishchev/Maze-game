@@ -33,7 +33,23 @@ void main() {
         expect(StoryLevel((c - 1) * per + n).size, c, reason: 'size is the chapter');
       }
     }
-    expect(StoryLevel(StoryLevel.count - 1).next, isNull);
+    expect(StoryProgress.instance.nextAfter(StoryLevel(StoryLevel.count - 1)), isNull);
+  });
+
+  test('every chapter is two trees forking into four lines', () {
+    for (var c = 1; c <= StoryLevel.chapters; c++) {
+      final levels = StoryLevel.ofChapter(c);
+      expect(levels.where((l) => l.before == null).map((l) => l.number), [1, 8]);
+      expect(levels.where((l) => l.afterwards.isEmpty).map((l) => l.number), [4, 7, 11, 14]);
+      expect(levels.where((l) => l.afterwards.length == 2).map((l) => l.number), [1, 8]);
+      for (final l in levels) {
+        final before = l.before;
+        if (before != null) {
+          expect(before.chapter, c);
+          expect(before.afterwards.map((a) => a.index), contains(l.index));
+        }
+      }
+    }
   });
 
   test('3, 4, 5, then 6 balls; only the last two chapters offer the hard one', () {
@@ -80,17 +96,13 @@ void main() {
       last = level.requiredStars;
       expect(level.requiredStars, lessThanOrEqualTo(level.index * StoryLevel.maxStars));
     }
-    expect(StoryLevel(0).requiredStars, 0);
-    expect(StoryLevel(1).requiredStars, 0);
-    expect(StoryLevel(9).requiredStars, 14);
+    expect(StoryLevel(13).requiredStars, 0);
+    expect(StoryLevel(14).requiredStars, 21);
+    expect(StoryLevel(StoryLevel.count - 1).requiredStars, 84);
   });
 
-  test('progress keeps the best stars and time, and opens levels by total stars', () async {
+  test('progress keeps the best stars and time', () async {
     final p = StoryProgress.instance;
-    expect(p.isUnlocked(StoryLevel(0)), isTrue);
-    expect(p.isUnlocked(StoryLevel(9)), isFalse);
-    expect(p.missingStars(StoryLevel(9)), 14);
-
     expect(await p.record(0, 2, 30000), 2);
     expect(await p.record(0, 1, 20000), 0, reason: 'worse stars add nothing');
     expect(p.stars(0), 2);
@@ -98,12 +110,80 @@ void main() {
     expect(await p.record(0, 3, 25000), 1);
     expect(p.stars(0), 3);
     expect(p.bestMillis(0), 20000);
+  });
 
-    for (var i = 1; i <= 4; i++) {
+  test('both trees start open, a fork opens two lines, and a line opens level by level', () async {
+    final p = StoryProgress.instance;
+    expect(p.isUnlocked(StoryLevel(0)), isTrue);
+    expect(p.isUnlocked(StoryLevel(7)), isTrue);
+    expect(p.isUnlocked(StoryLevel(1)), isFalse);
+    await p.record(7, 1, 10000);
+    expect(p.isUnlocked(StoryLevel(8)), isTrue);
+    expect(p.isUnlocked(StoryLevel(11)), isTrue, reason: 'both sides of the fork');
+    expect(p.isUnlocked(StoryLevel(9)), isFalse);
+    expect(p.isUnlocked(StoryLevel(1)), isFalse, reason: 'the other tree stays put');
+  });
+
+  test('the next chapter needs the last one finished and enough stars', () async {
+    final p = StoryProgress.instance;
+    final next = StoryLevel(14);
+    for (var i = 0; i < 13; i++) {
       await p.record(i, 3, 10000);
     }
-    expect(p.totalStars, 15);
-    expect(p.isUnlocked(StoryLevel(9)), isTrue);
+    expect(p.chapterOpen(2), isFalse, reason: 'one tip left, however many stars');
+    p.resetForTest();
+    for (var i = 0; i < 14; i++) {
+      await p.record(i, 1, 10000);
+    }
+    expect(p.chapterOpen(2), isFalse);
+    expect(p.missingStars(next), 7);
+    for (var i = 0; i < 4; i++) {
+      await p.record(i, 3, 10000);
+    }
+    expect(p.totalStars, 22);
+    expect(p.chapterOpen(2), isTrue);
+    expect(p.isUnlocked(next), isTrue);
+  });
+
+  test('levels and chapters are locked, open, done or perfect', () async {
+    final p = StoryProgress.instance;
+    expect(p.levelState(StoryLevel(0)), StoryState.open);
+    expect(p.levelState(StoryLevel(1)), StoryState.locked);
+    expect(p.chapterState(1), StoryState.open);
+    expect(p.chapterState(2), StoryState.locked);
+    await p.record(0, 2, 10000);
+    expect(p.levelState(StoryLevel(0)), StoryState.done);
+    await p.record(0, 3, 10000);
+    expect(p.levelState(StoryLevel(0)), StoryState.perfect);
+    for (var i = 1; i < 14; i++) {
+      await p.record(i, i == 5 ? 2 : 3, 10000);
+    }
+    expect(p.chapterState(1), StoryState.done);
+    await p.record(5, 3, 10000);
+    expect(p.chapterState(1), StoryState.perfect);
+    expect(p.chapterState(2), StoryState.open);
+  });
+
+  test('a level once finished stays open, whatever the rules say', () async {
+    final p = StoryProgress.instance;
+    await p.record(20, 2, 10000);
+    expect(p.isUnlocked(StoryLevel(20)), isTrue);
+    expect(p.isUnlocked(StoryLevel(21)), isFalse);
+  });
+
+  test('next level: on along the line, then what is left of the chapter', () async {
+    final p = StoryProgress.instance;
+    await p.record(0, 1, 10000);
+    expect(p.nextAfter(StoryLevel(0))!.index, 1);
+    await p.record(1, 1, 10000);
+    expect(p.nextAfter(StoryLevel(0))!.index, 4, reason: 'the other side of the fork');
+    p.resetForTest();
+    await p.record(3, 1, 10000);
+    expect(p.nextAfter(StoryLevel(3))!.index, 0, reason: 'the first unfinished');
+    for (var i = 0; i < 14; i++) {
+      await p.record(i, 3, 10000);
+    }
+    expect(p.nextAfter(StoryLevel(13))!.index, 14, reason: 'on to the next chapter');
   });
 
   test('progress survives a restart', () async {
