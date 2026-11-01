@@ -20,6 +20,7 @@ import 'balls.dart';
 import 'game_painter.dart';
 import 'kit.dart';
 import 'palette.dart';
+import 'puzzle_screen.dart';
 import 'worlds.dart';
 
 class GameScreen extends StatefulWidget {
@@ -139,11 +140,19 @@ class _GameScreenState extends State<GameScreen>
       final stars = story.starsFor(game.elapsed, game.config.ball);
       _stars = stars;
       Achievements.instance.storyWon(story, game.elapsed);
+      final firstTime = StoryProgress.instance.stars(story.index) == 0;
       StoryProgress.instance
           .record(story.index, stars, (game.elapsed * 1000).round())
           .then((_) => BallCollection.instance.grantRewards(StoryProgress.instance))
           .then((fresh) {
         if (fresh.isNotEmpty && mounted && game.won) setState(() => _newBalls = fresh);
+        // A level finished for the first time gives its piece of the puzzle,
+        // and the end card waits underneath.
+        if (firstTime && mounted && game.won) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => PuzzleScreen(place: story)),
+          );
+        }
       });
     }
   }

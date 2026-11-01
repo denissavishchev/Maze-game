@@ -8,6 +8,7 @@ import 'audio/sound_setting.dart';
 import 'game/achievements.dart';
 import 'game/ball_collection.dart';
 import 'game/story_progress.dart';
+import 'game/tale.dart';
 import 'l10n/strings.dart';
 import 'monetization/ad_service.dart';
 import 'monetization/store.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
   await VibrationSetting.instance.load();
   await Vip.instance.load();
   await StoryProgress.instance.load();
+  await TaleProgress.instance.load();
   await BallCollection.instance.load();
   await Achievements.instance.load();
   Sfx.enabled = true;

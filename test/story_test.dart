@@ -4,6 +4,7 @@ import 'package:orbyrinth/game/ball.dart';
 import 'package:orbyrinth/game/game_controller.dart';
 import 'package:orbyrinth/game/story.dart';
 import 'package:orbyrinth/game/story_progress.dart';
+import 'package:orbyrinth/game/tale.dart';
 import 'package:orbyrinth/game/world.dart';
 import 'package:orbyrinth/monetization/ad_service.dart';
 import 'package:orbyrinth/monetization/store.dart';
@@ -294,6 +295,7 @@ void main() {
     tester.view.physicalSize = const Size(780, 1688);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
+    TaleProgress.instance.skipForTest();
     await tester.pumpWidget(const MaterialApp(home: StoryMapScreen()));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(Icons.lock_rounded), findsWidgets);

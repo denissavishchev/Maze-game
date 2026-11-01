@@ -5,12 +5,15 @@ import '../game/ball.dart';
 import '../game/ball_collection.dart';
 import '../game/story.dart';
 import '../game/story_progress.dart';
+import '../game/tale.dart';
 import '../l10n/strings.dart';
 import 'ball_shop.dart';
 import 'balls.dart';
 import 'game_screen.dart';
 import 'kit.dart';
 import 'palette.dart';
+import 'puzzle_screen.dart';
+import 'tale_screen.dart';
 import 'worlds.dart';
 
 /// The story map: climbing towards the mirror through the five chapters, one
@@ -20,7 +23,7 @@ import 'worlds.dart';
 /// from [_colourOf].
 Color _colourOf(StoryState state) => switch (state) {
       StoryState.locked => Palette.stoneDark,
-      StoryState.open => Palette.water,
+      StoryState.open => const Color(0xFF2B7F8C),
       StoryState.done => Palette.leaf,
       StoryState.perfect => Palette.gold,
     };
@@ -51,8 +54,48 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
       if (current > 1 && target != null) {
         Scrollable.ensureVisible(target, alignment: 1);
       }
+      _tell();
     });
   }
+
+  /// Tells whatever part of the story is due.
+  Future<void> _tell() async {
+    final tale = TaleProgress.instance;
+    final progress = StoryProgress.instance;
+    final pages = tale.duePages(progress);
+    if (pages.isEmpty) return;
+    await showTale(context, pages);
+    await tale.markTold(progress);
+  }
+
+  /// The mirror: the way to the end of the story, open after the last chapter.
+  Future<void> _openMirror() async {
+    if (!StoryProgress.instance.chapterDone(StoryLevel.chapters)) {
+      _say(tr('story.need_chapter', {'n': StoryLevel.chapters}));
+      return;
+    }
+    final ending = await showTale(context, TalePages.finale);
+    if (ending == null || !mounted) return;
+    await TaleProgress.instance.setEnding(ending);
+    if (!mounted) return;
+    await showTale(context, TalePages.ending(ending));
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => PuzzleScreen(caption: ending == endingStay ? 'tale.ending.b.3' : null),
+    ));
+    if (!mounted) return;
+    await showTale(
+      context,
+      TalePages.credits(hasChameleon: BallCollection.instance.owns(BallKind.chameleon)),
+    );
+  }
+
+  void _say(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(text),
+      duration: const Duration(seconds: 2),
+    ));
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -90,14 +133,31 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
                             child: Text(tr('story.title'), style: cartoon(24, spacing: 3)),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        ChunkyIconButton(
+                          key: const Key('open-puzzle'),
+                          icon: Icons.extension_rounded,
+                          tooltip: tr('tale.puzzle'),
+                          size: 56,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(builder: (_) => const PuzzleScreen()),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         ChunkyIconButton(
                           key: const Key('open-ball-shop'),
                           icon: Icons.sports_baseball_rounded,
                           tooltip: tr('story.balls_shop'),
-                          size: 40,
+                          size: 56,
                           onTap: () => showBallShop(context),
                         ),
-                        const SizedBox(width: 10),
+                        const Spacer(),
                         const Icon(Icons.star_rounded, color: Palette.gold, size: 26),
                         const SizedBox(width: 4),
                         Text(
@@ -119,8 +179,9 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                       child: Column(
                         children: [
-                          _Mirror(
-                            done: progress.chapterDone(StoryLevel.chapters),
+                          GestureDetector(
+                            onTap: _openMirror,
+                            child: _Mirror(done: progress.chapterDone(StoryLevel.chapters)),
                           ),
                           // Each chapter leads up only once it is finished.
                           for (var c = StoryLevel.chapters; c >= 1; c--) ...[
@@ -249,12 +310,7 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
     } else {
       text = tr('story.need_branch');
     }
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(text),
-        duration: const Duration(seconds: 2),
-      ));
+    _say(text);
   }
 
   Future<void> _open(StoryLevel level) async {
@@ -275,6 +331,8 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
         builder: (_) => GameScreen(config: level.config(ball), story: level),
       ),
     );
+    if (!mounted) return;
+    await _tell();
     // "Next level" on the end card comes back here and opens its start sheet.
     if (next != null && mounted) {
       final nextLevel = StoryLevel(next);
@@ -344,23 +402,25 @@ class _Legend extends StatelessWidget {
 
 /// One thick line of the map.
 class _Line {
-  const _Line(this.a, this.b, this.width, this.colour);
+  const _Line(this.a, this.b, this.width, this.colour, {this.square = false});
 
   final Offset a;
   final Offset b;
   final double width;
   final Color colour;
+
+  /// Ends square, to meet another piece of the same line without a seam.
+  final bool square;
 }
 
 /// Draws lines that join up solidly: all the cartoon outlines first, then all
-/// the colours on top, so no outline ever cuts across a join. The trunk ends
-/// square, so that its pieces meet without a seam.
+/// the colours on top, so no outline ever cuts across a join.
 void _drawLines(Canvas canvas, List<_Line> lines) {
   for (final outline in [true, false]) {
     for (final line in lines) {
       final paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeCap = line.width == _TreePainter.trunkWidth ? StrokeCap.butt : StrokeCap.round
+        ..strokeCap = line.square ? StrokeCap.butt : StrokeCap.round
         ..strokeWidth = outline ? line.width + 3 : line.width
         ..color = outline ? Palette.ink : line.colour;
       canvas.drawLine(line.a, line.b, paint);
@@ -379,7 +439,7 @@ class _TrunkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) => _drawLines(canvas, [
         _Line(Offset(size.width / 2, 0), Offset(size.width / 2, size.height + under),
-            _TreePainter.trunkWidth, _colourOf(state)),
+            _TreePainter.width, _colourOf(state), square: true),
       ]);
 
   @override
@@ -388,7 +448,7 @@ class _TrunkPainter extends CustomPainter {
 
 /// One chapter's lines. From a rail along the foot two first levels rise and
 /// fork into four straight lines, whose tips meet a rail along the top that
-/// leads on. The line up to a level has that level's colour; the top rail
+/// leads on. The way up to a level has that level's colour; the top rail
 /// lights up only when the whole chapter is finished. A closed chapter shows
 /// only the trunk.
 class _TreePainter extends CustomPainter {
@@ -400,8 +460,8 @@ class _TreePainter extends CustomPainter {
   final List<StoryState> levels;
 
   static const double nodeSize = 62;
-  static const double width = 6;
-  static const double trunkWidth = 10;
+  /// Every line of the map is this thick, so that they all join up smoothly.
+  static const double width = 7;
 
   /// Rows of levels sit this far apart.
   static const double rise = 88;
@@ -434,7 +494,7 @@ class _TreePainter extends CustomPainter {
     final colour = _colourOf(chapter);
     if (chapter == StoryState.locked) {
       _drawLines(canvas, [
-        _Line(Offset(mid, -overlap), Offset(mid, size.height), trunkWidth, colour),
+        _Line(Offset(mid, -overlap), Offset(mid, size.height), width, colour, square: true),
       ]);
       return;
     }
@@ -442,19 +502,27 @@ class _TreePainter extends CustomPainter {
     final left = size.width * 0.25;
     final right = size.width * 0.75;
 
-    // The way in, along the foot.
+    // The way in, along the foot: each side has the colour of the level it
+    // leads to, and the middle that of the further side.
+    final first = levels.first;
+    final second = levels[StoryLevel.perChapter ~/ 2];
+    final leftAhead = first.index > second.index;
+    final leftSide = _Line(Offset(left, foot), Offset(mid, foot), width, _colourOf(first));
+    final rightSide = _Line(Offset(mid, foot), Offset(right, foot), width, _colourOf(second));
     final lines = [
-      _Line(Offset(mid, foot), Offset(mid, size.height), trunkWidth, colour),
-      _Line(Offset(left, foot), Offset(right, foot), width, colour),
+      if (leftAhead) rightSide else leftSide,
+      if (leftAhead) leftSide else rightSide,
+      _Line(Offset(mid, foot), Offset(mid, size.height), width,
+          _colourOf(leftAhead ? first : second), square: true),
     ];
 
     // The way out, along the top.
     final finished = chapter == StoryState.done || chapter == StoryState.perfect;
     final out = finished ? colour : _colourOf(StoryState.locked);
-    final first = size.width / 8;
+    final edge = size.width / 8;
     lines.addAll([
-      _Line(Offset(mid, -overlap), Offset(mid, _railTop), trunkWidth, out),
-      _Line(Offset(first, _railTop), Offset(size.width - first, _railTop), width, out),
+      _Line(Offset(mid, -overlap), Offset(mid, _railTop), width, out, square: true),
+      _Line(Offset(edge, _railTop), Offset(size.width - edge, _railTop), width, out),
     ]);
 
     for (var i = 0; i < levels.length; i++) {

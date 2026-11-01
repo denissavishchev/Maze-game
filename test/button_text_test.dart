@@ -5,6 +5,7 @@ import 'package:orbyrinth/game/ball_collection.dart';
 import 'package:orbyrinth/game/game_controller.dart';
 import 'package:orbyrinth/game/story.dart';
 import 'package:orbyrinth/game/story_progress.dart';
+import 'package:orbyrinth/game/tale.dart';
 import 'package:orbyrinth/l10n/strings.dart';
 import 'package:orbyrinth/ui/ball_shop.dart';
 import 'package:orbyrinth/ui/game_screen.dart';
@@ -107,6 +108,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     StoryProgress.instance.resetForTest();
+    TaleProgress.instance.skipForTest();
     await BallCollection.instance.reset();
   });
   tearDown(() => AppLanguage.instance.lang = AppLang.pl);
