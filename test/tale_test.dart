@@ -59,7 +59,6 @@ void main() {
       for (var c = 1; c <= StoryLevel.chapters; c++) ...[TalePages.card(c), ...TalePages.note(c)],
       ...TalePages.ending(endingOpen),
       ...TalePages.ending(endingStay),
-      ...TalePages.credits(hasChameleon: false),
     ];
     for (final p in pages) {
       expect(File(p.asset).existsSync(), isTrue, reason: p.asset);
@@ -121,11 +120,9 @@ void main() {
     expect(tale.duePages(story), isEmpty);
   });
 
-  test('the two endings differ, and the chameleon is mentioned only when missing', () {
+  test('the two endings differ', () {
     expect(TalePages.ending(endingOpen).map((p) => p.image), ['ending_a_1', 'ending_a_2', 'ending_a_3']);
     expect(TalePages.ending(endingStay).last.holdSeconds, 8);
-    expect(TalePages.credits(hasChameleon: true), hasLength(1));
-    expect(TalePages.credits(hasChameleon: false), hasLength(2));
   });
 
   testWidgets('first visit: the intro plays, a tap goes on, and it comes only once', (tester) async {
@@ -247,6 +244,37 @@ void main() {
     expect(find.text(tr('tale.level.1')), findsOneWidget);
   });
 
+  testWidgets('every reward has its painted ball', (tester) async {
+    for (final b in BallCollection.chapterRewards) {
+      final asset = rewardAsset(b);
+      expect(asset, isNotNull, reason: b.name);
+      expect(File(asset!).existsSync(), isTrue, reason: asset);
+    }
+    await tester.pumpWidget(MaterialApp(home: TaleScreen(pages: [TalePages.note(1)[1]])));
+    await settle(tester);
+    expect(find.byKey(const Key('tale-reward-ball')), findsOneWidget);
+  });
+
+  testWidgets('the silence waits while the game is away', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Builder(
+      builder: (context) => TextButton(
+        onPressed: () => showTale(context, TalePages.ending(endingStay).sublist(1)),
+        child: const Text('go'),
+      ),
+    )));
+    await tester.tap(find.text('go'));
+    await settle(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 20));
+    expect(find.byType(TaleScreen), findsOneWidget, reason: 'the time away does not count');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 9));
+    await settle(tester);
+    expect(find.byType(TaleScreen), findsNothing);
+  });
+
   testWidgets('the mirror stays shut until the last chapter is finished', (tester) async {
     tale.skipForTest();
     await tester.pumpWidget(const MaterialApp(home: StoryMapScreen()));
@@ -291,12 +319,12 @@ void main() {
     expect(find.text(tr('tale.ending.b.3')), findsOneWidget);
     await tester.tap(find.byKey(const Key('puzzle-next')));
     await settle(tester);
+    expect(find.byKey(const Key('credits-title')), findsOneWidget);
     expect(find.text(tr('tale.credits')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('tale-page')));
+    expect(find.text(tr('tale.ending.chameleon')), findsOneWidget, reason: 'no chameleon yet');
+    await tester.tap(find.byKey(const Key('credits-back')));
     await settle(tester);
-    expect(find.text(tr('tale.ending.chameleon')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('tale-page')));
-    await settle(tester);
-    expect(find.byType(TaleScreen), findsNothing);
+    expect(find.byType(CreditsScreen), findsNothing);
+    expect(find.byKey(const Key('story-mirror')), findsOneWidget, reason: 'back on the map');
   });
 }

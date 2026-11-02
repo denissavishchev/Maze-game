@@ -84,10 +84,13 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
       builder: (_) => PuzzleScreen(caption: ending == endingStay ? 'tale.ending.b.3' : null),
     ));
     if (!mounted) return;
-    await showTale(
-      context,
-      TalePages.credits(hasChameleon: BallCollection.instance.owns(BallKind.chameleon)),
-    );
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+      transitionDuration: storyMotion(context, 600),
+      pageBuilder: (_, _, _) =>
+          CreditsScreen(hasChameleon: BallCollection.instance.owns(BallKind.chameleon)),
+      transitionsBuilder: (_, animation, _, child) =>
+          FadeTransition(opacity: animation, child: child),
+    ));
   }
 
   void _say(String text) => ScaffoldMessenger.of(context)
@@ -341,27 +344,82 @@ class _StoryMapScreenState extends State<StoryMapScreen> {
   }
 }
 
-/// The mirror at the top of the tree, where the story ends.
-class _Mirror extends StatelessWidget {
+/// The mirror at the top of the tree, where the story ends. Once the last
+/// chapter is finished it glows, slowly and without end.
+class _Mirror extends StatefulWidget {
   const _Mirror({required this.done});
 
   final bool done;
 
   @override
-  Widget build(BuildContext context) => Container(
-        key: const Key('story-mirror'),
-        width: 70,
-        height: 70,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Palette.panel,
-          border: Border.all(color: done ? Palette.gold : Palette.stoneDark, width: 4),
-        ),
-        child: Icon(
-          Icons.auto_awesome_rounded,
-          color: done ? Palette.gold : Colors.white54,
-          size: 34,
-        ),
+  State<_Mirror> createState() => _MirrorState();
+}
+
+class _MirrorState extends State<_Mirror> with SingleTickerProviderStateMixin {
+  late final _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _run();
+  }
+
+  @override
+  void didUpdateWidget(_Mirror old) {
+    super.didUpdateWidget(old);
+    _run();
+  }
+
+  void _run() {
+    if (widget.done && !MediaQuery.disableAnimationsOf(context)) {
+      if (!_glow.isAnimating) _glow.repeat(reverse: true);
+    } else {
+      _glow.stop();
+      _glow.value = widget.done ? 1 : 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _glow,
+        builder: (context, _) {
+          final t = Curves.easeInOut.transform(_glow.value);
+          return Container(
+            key: const Key('story-mirror'),
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Palette.panel,
+              border: Border.all(
+                color: widget.done ? Palette.gold : Palette.stoneDark,
+                width: 4,
+              ),
+              boxShadow: [
+                if (widget.done)
+                  BoxShadow(
+                    color: Palette.gold.withValues(alpha: 0.35 + 0.4 * t),
+                    blurRadius: 10 + 14 * t,
+                    spreadRadius: 1 + 3 * t,
+                  ),
+              ],
+            ),
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              color: widget.done ? Palette.gold : Colors.white54,
+              size: 34,
+            ),
+          );
+        },
       );
 }
 

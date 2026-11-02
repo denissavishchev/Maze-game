@@ -18,7 +18,7 @@ Path _pieceOf(StoryLevel level, double size) {
   final c = Offset(size / 2, size / 2);
   final half = size / 2;
   final ro = Puzzle.radiusOf(level) * half;
-  final ri = ro - Puzzle.ringWidth * half;
+  final ri = Puzzle.innerOf(level) * half;
   final a = Puzzle.angleOf(level);
   final sweep = Puzzle.wedge;
   return Path()
@@ -72,11 +72,14 @@ class _SlotPainter extends CustomPainter {
 /// The whole board: the found pieces in colour, the others in the dark, and in
 /// the middle what the story ended with.
 class _Board extends StatelessWidget {
-  const _Board({super.key, required this.size, required this.found, this.slot});
+  const _Board({super.key, required this.size, required this.found, this.slot, this.fresh});
 
   final double size;
   final List<StoryLevel> found;
   final StoryLevel? slot;
+
+  /// The piece just put in, which lights up on its own.
+  final StoryLevel? fresh;
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +105,18 @@ class _Board extends StatelessWidget {
             clipper: _Pieces(found),
             child: Image.asset(picture, width: size, height: size),
           ),
+          if (fresh != null)
+            TweenAnimationBuilder<double>(
+              key: ValueKey(fresh!.index),
+              tween: Tween(begin: 0, end: 1),
+              duration: storyMotion(context, 420),
+              curve: Curves.easeOut,
+              builder: (context, t, child) => Opacity(opacity: t, child: child),
+              child: ClipPath(
+                clipper: _Pieces([fresh!]),
+                child: Image.asset(picture, width: size, height: size),
+              ),
+            ),
           if (slot != null)
             Positioned.fill(child: CustomPaint(painter: _SlotPainter(slot!))),
           Center(
@@ -113,10 +128,16 @@ class _Board extends StatelessWidget {
               clipBehavior: Clip.antiAlias,
               child: ending == null
                   ? null
-                  : Image.asset(
-                      'assets/images/story/'
-                      '${ending == endingOpen ? 'puzzle_center_a' : 'ending_b_3'}.webp',
-                      fit: BoxFit.cover,
+                  : TweenAnimationBuilder<double>(
+                      key: ValueKey(ending),
+                      tween: Tween(begin: 0, end: 1),
+                      duration: storyMotion(context, 360),
+                      builder: (context, t, child) => Opacity(opacity: t, child: child),
+                      child: Image.asset(
+                        'assets/images/story/'
+                        '${ending == endingOpen ? 'puzzle_center_a' : 'ending_b_3'}.webp',
+                        fit: BoxFit.cover,
+                      ),
                     ),
             ),
           ),
@@ -151,6 +172,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
   /// The piece whose line is showing.
   StoryLevel? _line;
 
+  /// The piece just put in, lighting up; and whether the waiting one is held.
+  StoryLevel? _fresh;
+  bool _holding = false;
+
   static const double _pieceScale = 1.3;
   static const double _pieceWidth = 120;
   static const double _closeZoom = 3;
@@ -181,15 +206,20 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
 
   List<StoryLevel> get _found => [
         for (final l in StoryLevel.all)
-          if (StoryProgress.instance.stars(l.index) > 0 && l.index != _waiting?.index) l,
+          if (StoryProgress.instance.stars(l.index) > 0 &&
+              l.index != _waiting?.index &&
+              l.index != _fresh?.index)
+            l,
       ];
 
   void _drop() {
     Haptics.play(Haptic.tick);
     setState(() {
       _line = _waiting;
+      _fresh = _waiting;
       _waiting = null;
       _drag = Offset.zero;
+      _holding = false;
     });
   }
 
@@ -257,6 +287,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
                   size: size,
                   found: _found,
                   slot: waiting,
+                  fresh: _fresh,
                 ),
               ),
             ],
@@ -366,12 +397,16 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
     );
     final (mx, my) = Puzzle.middleOf(level);
     final target = Offset(size / 2 + mx * size / 2, size / 2 + my * size / 2);
-    return Positioned(
+    return AnimatedPositioned(
+      // Held, it follows the finger; let go elsewhere, it glides back home.
+      duration: _holding ? Duration.zero : storyMotion(context, 250),
+      curve: Curves.easeOutCubic,
       left: home.dx + _drag.dx,
       top: home.dy + _drag.dy,
       child: GestureDetector(
         key: const Key('puzzle-piece'),
         onTap: _drop,
+        onPanStart: (_) => setState(() => _holding = true),
         onPanUpdate: (d) => setState(() => _drag += d.delta),
         onPanEnd: (_) {
           // Where it was let go on the board, however far that is zoomed.
@@ -380,7 +415,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> {
           if ((onBoard - target).distance < size * 0.28) {
             _drop();
           } else {
-            setState(() => _drag = Offset.zero);
+            setState(() {
+              _holding = false;
+              _drag = Offset.zero;
+            });
           }
         },
         child: SizedBox.fromSize(

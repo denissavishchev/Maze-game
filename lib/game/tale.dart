@@ -79,13 +79,6 @@ class TalePages {
           TalePage('ending_b_1', text: 'tale.ending.b.1'),
           TalePage('ending_b_2', holdSeconds: 8),
         ];
-
-  /// What closes the story; a player still without the chameleon is told how
-  /// to get it.
-  static List<TalePage> credits({required bool hasChameleon}) => [
-        const TalePage('chapter_5', text: 'tale.credits'),
-        if (!hasChameleon) const TalePage('chapter_5', text: 'tale.ending.chameleon'),
-      ];
 }
 
 /// The round puzzle: one piece per story level, five rings of fourteen wedges.
@@ -94,21 +87,43 @@ class TalePages {
 class Puzzle {
   static const double outer = 1000 / 1024;
   static const double inner = 240 / 1024;
-  static double get ringWidth => (outer - inner) / StoryLevel.chapters;
   static double get wedge => 2 * pi / StoryLevel.perChapter;
+
+  /// Where the rings meet in each wedge, from the rim inwards, in pixels of
+  /// the 2048 picture from its centre. The painting does not keep its rings
+  /// at one radius all the way round, so each wedge is cut along its own.
+  static const List<List<int>> _borders = [
+    [1000, 817, 676, 535, 389, 240],
+    [1000, 816, 674, 534, 388, 240],
+    [1000, 811, 671, 528, 384, 240],
+    [1000, 815, 669, 520, 375, 240],
+    [1000, 876, 665, 520, 373, 240],
+    [1000, 811, 664, 510, 367, 240],
+    [1000, 812, 659, 510, 361, 240],
+    [1000, 904, 659, 493, 360, 240],
+    [1000, 810, 664, 505, 365, 240],
+    [1000, 793, 664, 513, 371, 240],
+    [1000, 855, 668, 515, 374, 240],
+    [1000, 878, 670, 529, 380, 240],
+    [1000, 816, 674, 536, 389, 240],
+    [1000, 818, 676, 535, 390, 240],
+  ];
 
   static int ring(StoryLevel level) => level.chapter - 1;
   static int sector(StoryLevel level) => level.number - 1;
 
-  /// Outer radius of [level]'s piece.
-  static double radiusOf(StoryLevel level) => outer - ring(level) * ringWidth;
+  static double _border(int sector, int i) => _borders[sector][i] / 1024;
+
+  /// Outer and inner radius of [level]'s piece.
+  static double radiusOf(StoryLevel level) => _border(sector(level), ring(level));
+  static double innerOf(StoryLevel level) => _border(sector(level), ring(level) + 1);
 
   /// Angle of the start of [level]'s piece.
   static double angleOf(StoryLevel level) => -pi / 2 + sector(level) * wedge;
 
   /// The middle of [level]'s piece, from the centre of the picture.
   static (double, double) middleOf(StoryLevel level) {
-    final r = radiusOf(level) - ringWidth / 2;
+    final r = (radiusOf(level) + innerOf(level)) / 2;
     final a = angleOf(level) + wedge / 2;
     return (r * cos(a), r * sin(a));
   }
@@ -117,9 +132,12 @@ class Puzzle {
   static StoryLevel? levelAt(double x, double y) {
     final d = sqrt(x * x + y * y);
     if (d >= outer || d < inner) return null;
-    final r = ((outer - d) / ringWidth).floor();
     final a = (atan2(y, x) + pi / 2) % (2 * pi);
-    return StoryLevel(r * StoryLevel.perChapter + (a / wedge).floor());
+    final s = (a / wedge).floor() % StoryLevel.perChapter;
+    for (var r = 0; r < StoryLevel.chapters; r++) {
+      if (d >= _border(s, r + 1)) return StoryLevel(r * StoryLevel.perChapter + s);
+    }
+    return null;
   }
 }
 
