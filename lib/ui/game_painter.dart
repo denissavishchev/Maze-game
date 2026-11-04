@@ -223,6 +223,9 @@ class GamePainter extends CustomPainter {
       _lava(canvas, l, t);
     }
     for (final j in game.jellies) {
+      _jellyTrail(canvas, j);
+    }
+    for (final j in game.jellies) {
       switch (game.config.world) {
         case WorldKind.candy:
           _gummy(canvas, j, t);
@@ -281,7 +284,7 @@ class GamePainter extends CustomPainter {
         Paint()
           ..shader = ui.Gradient.radial(
             center,
-            s * game.config.lightRadius * game.lightFactor,
+            s * game.lightRadius * game.lightFactor,
             [Colors.transparent, Colors.black.withValues(alpha: 0.7), const Color(0xFA000000)],
             [0.3, 0.62, 1],
           ),
@@ -1205,7 +1208,7 @@ class GamePainter extends CustomPainter {
     for (var i = 0; i <= rays; i++) {
       final a = angle - GameController.cameraHalfAngle +
           2 * GameController.cameraHalfAngle * i / rays;
-      final d = game.sightDistance(cam.pos, a, GameController.cameraRange);
+      final d = game.sightDistance(cam.pos, a, game.cameraSight);
       final q = cam.pos + polar(d, a);
       cone.lineTo(q.dx, q.dy);
     }
@@ -1216,7 +1219,7 @@ class GamePainter extends CustomPainter {
       Paint()
         ..shader = ui.Gradient.radial(
           cam.pos,
-          GameController.cameraRange,
+          game.cameraSight,
           [tint.withValues(alpha: 0.5), tint.withValues(alpha: 0.06)],
         ),
     );
@@ -1254,14 +1257,15 @@ class GamePainter extends CustomPainter {
     const reach = GameController.jellyReach;
     final glow = 0.45 + 0.55 * j.glow;
     final p = j.pos.translate(0, sin(t * 2 + j.home.dx) * 0.03);
-    // Danger zone.
+    // Danger zone, in this jellyfish's own colour (the same as its dots).
+    final hue = _jellyHue(j);
     c.drawCircle(
       p,
       reach,
       Paint()
         ..shader = ui.Gradient.radial(p, reach, [
-          const Color(0xFFFF8AE8).withValues(alpha: 0.12 + 0.22 * glow),
-          const Color(0xFFFF8AE8).withValues(alpha: 0),
+          hue.withValues(alpha: 0.12 + 0.22 * glow),
+          hue.withValues(alpha: 0),
         ], const [0.5, 1]),
     );
     c.drawCircle(
@@ -1270,7 +1274,7 @@ class GamePainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.03
-        ..color = const Color(0xFFFFB3F0).withValues(alpha: 0.25 + 0.4 * glow),
+        ..color = hue.withValues(alpha: 0.35 + 0.4 * glow),
     );
     // Tentacles trailing behind and waving.
     final tent = Paint()
@@ -1761,10 +1765,30 @@ class GamePainter extends CustomPainter {
 
   /// A gummy bear: a translucent jelly body with ears, hopping along its
   /// route, inside a ring that shows how far it reaches.
+  /// Where a gummy bear or a jellyfish will be over the next two seconds, as
+  /// small dots in its own colour that fade with distance.
+  void _jellyTrail(Canvas c, Jellyfish j) {
+    final dots = game.jellyAhead(j);
+    if (dots.isEmpty) return;
+    final hue = _jellyHue(j);
+    for (var i = 0; i < dots.length; i++) {
+      final fade = 1 - i / dots.length;
+      c.drawCircle(dots[i], 0.05, Paint()..color = hue.withValues(alpha: 0.25 + 0.5 * fade));
+    }
+  }
+
+  /// Each gummy bear, and each jellyfish, gets a colour of its own.
+  static const _gummyHues = [Color(0xFFFF3B5C), Color(0xFF55D66B), Color(0xFFFF9F2E), Color(0xFFFFE04A)];
+  static const _jellyHues = [Color(0xFFFF8AE8), Color(0xFFFFE04A), Color(0xFF7CFFB2), Color(0xFFFF9F2E)];
+
+  Color _jellyHue(Jellyfish j) {
+    final hues = game.config.world == WorldKind.candy ? _gummyHues : _jellyHues;
+    return hues[max(0, game.jellies.indexOf(j)) % hues.length];
+  }
+
   void _gummy(Canvas c, Jellyfish j, double t) {
     const reach = GameController.jellyReach;
-    const hues = [Color(0xFFFF3B5C), Color(0xFF55D66B), Color(0xFFFF9F2E), Color(0xFFFFE04A)];
-    final hue = hues[(j.home.dx * 7 + j.home.dy * 13).abs().floor() % hues.length];
+    final hue = _jellyHue(j);
     final glow = 0.45 + 0.55 * j.glow;
     final hop = (sin(t * 6 + j.home.dx) * 0.5 + 0.5) * 0.05;
     final p = j.pos.translate(0, -hop);
@@ -2217,10 +2241,11 @@ class GamePainter extends CustomPainter {
             ..strokeWidth = 0.06,
         );
       } else {
-        c.drawCircle(h.pos.translate(0.06, 0.1), 0.42,
+        final r = h.radius;
+        c.drawCircle(h.pos.translate(r * 0.15, r * 0.25), r,
             Paint()..color = Colors.black.withValues(alpha: 0.35 * fadeOut));
-        c.drawCircle(h.pos, 0.42, Paint()..color = const Color(0xFF6E7378).withValues(alpha: fadeOut));
-        c.drawCircle(h.pos.translate(-0.1, -0.1), 0.2,
+        c.drawCircle(h.pos, r, Paint()..color = const Color(0xFF6E7378).withValues(alpha: fadeOut));
+        c.drawCircle(h.pos.translate(-r * 0.25, -r * 0.25), r * 0.48,
             Paint()..color = const Color(0xFFA2A7AC).withValues(alpha: fadeOut));
       }
       return;
@@ -2352,7 +2377,7 @@ class GamePainter extends CustomPainter {
     final cone = Path()
       ..moveTo(p.dx, p.dy)
       ..arcTo(
-        Rect.fromCircle(center: p, radius: GameController.droneRange),
+        Rect.fromCircle(center: p, radius: game.droneSight),
         d.viewAngle - GameController.droneHalfAngle,
         GameController.droneHalfAngle * 2,
         false,
@@ -2363,7 +2388,7 @@ class GamePainter extends CustomPainter {
       Paint()
         ..shader = ui.Gradient.radial(
           p,
-          GameController.droneRange,
+          game.droneSight,
           [
             Color.lerp(const Color(0xFFFFF59D), Colors.redAccent, k)!
                 .withValues(alpha: 0.5),

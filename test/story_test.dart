@@ -384,24 +384,21 @@ void main() {
     expect(g.stage, stage, reason: 'the run goes on');
   });
 
-  testWidgets('"try again" always shows an ad, except for a VIP', (tester) async {
-    late BuildContext ctx;
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(builder: (c) {
-        ctx = c;
-        return const SizedBox();
-      }),
-    ));
-    final shown = AdService.interstitialAlways(ctx);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('ad-close')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('ad-close')));
-    await tester.pumpAndSettle();
-    await shown;
-
-    Vip.instance.on = true;
-    await AdService.interstitialAlways(ctx);
-    await tester.pumpAndSettle();
+  testWidgets('"try again" starts the level over without an ad', (tester) async {
+    tester.view.physicalSize = const Size(780, 1688);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final g = GameController(StoryLevel(0).config(BallKind.wood), seed: 3);
+    g.started = true;
+    g.status = GameStatus.lost;
+    for (var i = 0; i < 5; i++) {
+      AdGate.instance.levelFinished();
+    }
+    await tester.pumpWidget(MaterialApp(home: GameScreen(config: g.config, controller: g)));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('end-retry')));
+    await tester.pump(const Duration(seconds: 1));
     expect(find.byKey(const Key('ad-close')), findsNothing);
+    expect(g.status, GameStatus.playing);
   });
 }

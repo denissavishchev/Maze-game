@@ -567,28 +567,56 @@ void main() {
     }
   });
 
-  test('a landed boulder is solid until it crumbles', () {
-    final game = GameController(const GameConfig(WorldKind.mountains, 3), seed: 4);
-    final m = game.maze as PolarMaze;
-    final n = m.sectors.last;
-    final theta = (m.entrance + 0.5) * 2 * pi / n;
-    final out = Offset(cos(theta), sin(theta));
-    final rock = out * (m.radius + 0.6);
-    game.hazards.add(Hazard(rock, armAt: 0, life: 9, radius: 0.85));
-    game.pos = out * (m.radius - 0.3);
-    game.vel = out * 3;
-    game.started = true;
-    for (var i = 0; i < 90; i++) {
-      game.update(1 / 60, out);
+  test('a boulder fills half a corridor against a wall, and the other half is safe', () {
+    for (var seed = 0; seed < 4; seed++) {
+      final game = GameController(const GameConfig(WorldKind.mountains, 5), seed: seed);
+      game.started = true;
+      final rnd = Random(seed);
+      for (var k = 0; k < 40; k++) {
+        game.pos = game.maze.cellCenter(rnd.nextInt(game.maze.cellCount));
+        game.vel = Offset(rnd.nextDouble() * 6 - 3, rnd.nextDouble() * 6 - 3);
+        game.hazards.clear();
+        game.spawnTrap();
+        final rock = game.hazards.last;
+        expect(rock.radius, GameController.boulderRadius);
+        var wall = double.infinity;
+        for (final w in game.maze.segmentsNear(rock.pos)) {
+          if (w.gate >= 0 && game.gateOpen[w.gate]) continue;
+          final ab = w.b - w.a;
+          final t = (((rock.pos - w.a).dx * ab.dx + (rock.pos - w.a).dy * ab.dy) /
+                  ab.distanceSquared)
+              .clamp(0.0, 1.0);
+          wall = min(wall, (rock.pos - (w.a + ab * t)).distance);
+        }
+        expect(wall, closeTo(PolarMaze.wallHalf + GameController.boulderRadius, 0.02),
+            reason: 'seed $seed: the boulder leans on a wall');
+      }
+      game.dispose();
     }
-    expect(game.lost, isFalse);
-    expect((game.pos - rock).distance,
-        greaterThanOrEqualTo(GameController.rubbleRadius + game.ballRadius - 0.01),
-        reason: 'the ball cannot pass through the rubble');
-    game.dispose();
+
+    // A ring corridor: walls at radius 3 and 4, 0.8 apart face to face. The
+    // rock leans on the inner one; a wooden ball pressed to the outer one
+    // has its middle 0.34 from the rock's and is not hit, one under it is.
+    for (final under in [false, true]) {
+      final game = GameController(const GameConfig(WorldKind.mountains, 3), seed: 4);
+      final m = game.maze as PolarMaze;
+      final cell = m.offset[3];
+      final dir = m.cellCenter(cell) / m.cellCenter(cell).distance;
+      final rock = dir * (3 + PolarMaze.wallHalf + GameController.boulderRadius);
+      final ball = under ? rock : dir * (4 - PolarMaze.wallHalf - game.ballRadius);
+      game.started = true;
+      game.hazards.add(Hazard(rock, armAt: 0.05, life: 2, radius: GameController.boulderRadius));
+      for (var i = 0; i < 10; i++) {
+        game.pos = ball;
+        game.vel = Offset.zero;
+        game.update(1 / 60, Offset.zero);
+      }
+      expect(game.lost, under, reason: under ? 'right under it' : 'beside it');
+      game.dispose();
+    }
   });
 
-  test('wind only blows on the two biggest sizes and pushes the ball', () {
+  test('wind blows on every size and pushes the ball', () {
     // The force itself.
     final game = GameController(const GameConfig(WorldKind.mountains, 5),
         hazardsEnabled: false, seed: 2);
@@ -601,7 +629,7 @@ void main() {
     expect(game.vel.dx, greaterThan(0));
     game.dispose();
 
-    // The schedule: warning first, then a gust; never at the smaller sizes.
+    // The schedule: warning first, then a gust, from the smallest size up.
     for (final level in [1, 3, 4, 5]) {
       final g = GameController(GameConfig(WorldKind.mountains, level), seed: 2);
       g.started = true;
@@ -613,8 +641,8 @@ void main() {
         warned = warned || g.windWarnLeft > 0;
         blew = blew || g.windLeft > 0;
       }
-      expect(blew, level >= 4, reason: 'level $level');
-      expect(warned, level >= 4, reason: 'level $level');
+      expect(blew, isTrue, reason: 'level $level');
+      expect(warned, isTrue, reason: 'level $level');
       g.dispose();
     }
   });

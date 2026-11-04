@@ -158,11 +158,9 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// Shows the interstitial if one is due, then goes on with [action].
-  Future<void> _afterAd(VoidCallback action, {bool always = false}) async {
+  Future<void> _afterAd(VoidCallback action) async {
     _paused = true;
-    await (always
-        ? AdService.interstitialAlways(context)
-        : AdService.interstitialIfDue(context));
+    await AdService.interstitialIfDue(context);
     _paused = false;
     if (mounted) action();
   }
@@ -315,7 +313,7 @@ class _GameScreenState extends State<GameScreen>
       onMap: () => _afterAd(() => Navigator.of(context).pop()),
       onNext: () => _afterAd(() => Navigator.of(context).pop(next!.index)),
       onNewMaze: () => _afterAd(game.newMaze),
-      onRetry: () => _afterAd(game.restart, always: true),
+      onRetry: game.restart,
       onAgain: () => _afterAd(game.resetRun),
       onContinue: _continueWithAd,
     );
@@ -972,6 +970,7 @@ class _EndCard extends StatelessWidget {
                     )
                   else ...[
                     FilledButton(
+                      key: const Key('end-retry'),
                       style: gold,
                       onPressed: onRetry,
                       child: Text(tr('end.retry')),

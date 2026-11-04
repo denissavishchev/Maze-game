@@ -52,13 +52,17 @@ class GameConfig {
   /// Mountains: warning before a boulder lands where the ball is heading.
   double get aimedWarn => _pick(const [1.5, 1.4, 1.3, 1.15, 1.0]);
 
-  /// Mountains: gusts of wind only on the two biggest sizes.
-  bool get windEnabled => world == WorldKind.ocean || level >= 4;
+  /// Mountains: seconds between boulder spawns; from the middle size up
+  /// they come half as often, so the bigger mountains stay playable.
+  double get boulderInterval => trapInterval * 1.2 * (level >= 3 ? 2 : 1);
+
+  /// Gusts of wind (mountains) and currents (ocean) blow on every size.
+  bool get windEnabled => true;
 
   /// Acceleration of a gust, in units per second squared.
   double get windStrength => world == WorldKind.ocean
       ? _pick(const [3.0, 3.5, 4.0, 4.5, 5.0])
-      : _pick(const [0.0, 0.0, 0.0, 5.5, 7.5]);
+      : _pick(const [3.5, 4.0, 4.5, 5.5, 7.5]);
 
   /// Ocean: jellyfish patrolling the corridors, and how fast they swim.
   int get jellyCount => _pick(const [2, 2, 3, 3, 4]);

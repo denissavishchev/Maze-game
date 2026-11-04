@@ -463,9 +463,12 @@ class GameController extends ChangeNotifier {
   static const double impactSoundMin = 0.9;
   static const double impactSoundMax = 5.0;
 
-  /// A landed boulder stays this long as a solid block, and this wide.
-  static const double rubbleSeconds = 6;
-  static const double rubbleRadius = 0.42;
+  /// A boulder fills half the width of a corridor and lands against one of
+  /// its walls, so the other half stays free to roll past. It hits only a
+  /// ball whose middle is under it, and then crumbles to dust.
+  static const double boulderRadius = 0.2;
+  static const double boulderReach = boulderRadius + 0.05;
+  static const double rubbleSeconds = 1.5;
 
   /// Gust of wind: warning, then how long it blows.
   static const double windWarning = 1.5;
@@ -568,6 +571,42 @@ class GameController extends ChangeNotifier {
   BallKind get mimicking =>
       config.ball == BallKind.chameleon ? (_mimic ?? BallKind.wood) : config.ball;
 
+  /// Glass is hard to see: drones, cameras and yetis spot it from half as far.
+  double get sightScale => mimicking == BallKind.glass ? 0.5 : 1;
+  double get droneSight => droneRange * sightScale;
+  double get cameraSight => cameraRange * sightScale;
+
+  /// Underground: glass gathers the light and shines 40% further.
+  double get lightRadius => config.lightRadius * (mimicking == BallKind.glass ? 1.4 : 1);
+
+  /// Rubber: the one bounce off a creature this maze has been spent.
+  bool springUsed = false;
+
+  /// Rubber, going at least this fast, hops over spikes and open graves.
+  static const double hopSpeed = 2.5;
+
+  /// A bubble floats over spikes and graves, and fast rubber hops over them.
+  bool get _overTraps =>
+      ball.floats || (mimicking == BallKind.rubber && vel.distance >= hopSpeed);
+
+  /// Rubber bounces off the creature at [from] that caught it, once per maze,
+  /// and nothing can catch it for a moment after. False when the ball is not
+  /// rubber or the bounce is spent.
+  bool _spring(Offset from) {
+    if (mimicking != BallKind.rubber || springUsed) return false;
+    springUsed = true;
+    final away = pos - from;
+    final d = away.distance;
+    final dir = d < 1e-6 ? polar(1, _rnd.nextDouble() * kTwoPi) : away / d;
+    vel = dir * (_maxSpeed * ball.maxSpeed);
+    _invulnerable = 2.0;
+    bursts.add(Burst(pos, 3));
+    notice = 'notice.spring';
+    noticeArgs = const {};
+    noticeLeft = 2.0;
+    return true;
+  }
+
   void _shiftChameleon({bool burst = true}) {
     final others = [
       for (final k in BallKind.values)
@@ -625,7 +664,15 @@ class GameController extends ChangeNotifier {
   /// Ocean: jellyfish patrolling the corridors.
   List<Jellyfish> jellies = [];
   static const double jellyReach = 0.62;
-  static const double jellyPause = 0.7;
+
+  /// Jellyfish and gummy bears start at least this far apart, and their
+  /// patrols keep at least [patrolGap] from each other where they can.
+  static const double jellySpacing = 5;
+  static const double patrolGap = 1.6;
+  static const double jellyPause = 1.2;
+
+  /// How far ahead a jellyfish's or gummy bear's way is shown, in seconds.
+  static const double jellyLookAhead = 2;
 
   /// Glass: crumbling floor and the laser beams.
   List<Crumble> cracks = [];
@@ -1117,8 +1164,10 @@ class GameController extends ChangeNotifier {
     return false;
   }
 
-  /// Ocean: jellyfish start in cells well away from the start; their patrol
-  /// is worked out on the first step, when the gates are known.
+  /// Ocean: jellyfish start in cells well away from the start, and as far
+  /// from each other as the maze allows ([jellySpacing] first, closer only
+  /// when there is no room); their patrol is worked out on the first step,
+  /// when the gates are known.
   void _placeJellies() {
     final special = {maze.start, maze.goal, ...maze.buttonCells};
     final start = maze.cellCenter(maze.start);
@@ -1126,8 +1175,17 @@ class GameController extends ChangeNotifier {
       for (var c = 1; c < maze.cellCount; c++)
         if (!special.contains(c) && (maze.cellCenter(c) - start).distance > 3) c,
     ]..shuffle(_rnd);
-    for (final c in cells.take(config.jellyCount)) {
-      jellies.add(Jellyfish(maze.cellCenter(c)));
+    final homes = <Offset>[];
+    for (var gap = jellySpacing; homes.length < config.jellyCount && gap >= 0; gap -= 1) {
+      for (final c in cells) {
+        if (homes.length >= config.jellyCount) break;
+        final p = maze.cellCenter(c);
+        if (homes.any((h) => (h - p).distance < max(gap, 0.01))) continue;
+        homes.add(p);
+      }
+    }
+    for (final h in homes) {
+      jellies.add(Jellyfish(h));
     }
   }
 
@@ -1493,6 +1551,7 @@ class GameController extends ChangeNotifier {
     lightFactor = 1;
     _spawnTimer = config.trapInterval;
     _invulnerable = 0;
+    springUsed = false;
     _mercy = 0;
     _trail.clear();
     _recentClock = 0;
@@ -1867,11 +1926,13 @@ class GameController extends ChangeNotifier {
 
   /// Whether the ball is in the camera's view: near enough, inside the cone
   /// and with no wall in between.
-  bool cameraSees(SecurityCamera c) => _cameraSeesAt(c, pos, cameraAngle(c));
+  bool cameraSees(SecurityCamera c) =>
+      _cameraSeesAt(c, pos, cameraAngle(c), range: cameraSight);
 
-  bool _cameraSeesAt(SecurityCamera c, Offset p, double angle, {bool gatesOpen = false}) {
+  bool _cameraSeesAt(SecurityCamera c, Offset p, double angle,
+      {bool gatesOpen = false, double range = cameraRange}) {
     final v = p - c.pos;
-    if (v.distance > cameraRange) return false;
+    if (v.distance > range) return false;
     var diff = (v.direction - angle) % kTwoPi;
     if (diff > pi) diff -= kTwoPi;
     if (diff.abs() > cameraHalfAngle) return false;
@@ -2038,23 +2099,6 @@ class GameController extends ChangeNotifier {
         if (vn < 0) {
           final bounce = ball.bounce + (config.world == WorldKind.candy ? candyBounce : 0);
           vel -= n * (vn * (1 + bounce));
-          _impact = max(_impact, -vn);
-        }
-      }
-    }
-    // Landed boulders are solid until they crumble away.
-    if (config.world == WorldKind.mountains) {
-      final reachRock = rubbleRadius + ballRadius;
-      for (final h in hazards) {
-        if (!h.armed) continue;
-        final d = pos - h.pos;
-        final dist = d.distance;
-        if (dist >= reachRock) continue;
-        final n = dist < 1e-6 ? const Offset(1, 0) : d / dist;
-        pos = h.pos + n * reachRock;
-        final vn = vel.dx * n.dx + vel.dy * n.dy;
-        if (vn < 0) {
-          vel -= n * (vn * (1 + ball.bounce));
           _impact = max(_impact, -vn);
         }
       }
@@ -2342,8 +2386,8 @@ class GameController extends ChangeNotifier {
           }
           w.calm = 0;
           _followPath(w, dt, speed);
-          if ((w.pos - pos).distance < 0.45) {
-            _lose('lose.wolf');
+          if (_invulnerable <= 0 && (w.pos - pos).distance < 0.45) {
+            if (!_spring(w.pos)) _lose('lose.wolf');
             break;
           }
           // Tired wolves lie down again once the ball is far away.
@@ -2406,6 +2450,11 @@ class GameController extends ChangeNotifier {
           } else {
             d.alert = max(0, d.alert - dt * 1.5);
           }
+          if (d.alert < droneReaction &&
+              (d.pos - pos).distance < 0.4 &&
+              _spring(d.pos)) {
+            continue;
+          }
           if (d.alert >= droneReaction || (d.pos - pos).distance < 0.4) {
             caughtByDrone();
             break;
@@ -2462,8 +2511,8 @@ class GameController extends ChangeNotifier {
             g.pos += to / d * min(d, vel.distance * dt);
             g.angle = to.direction;
           }
-          if ((g.pos - pos).distance < 0.4) {
-            _lose('lose.ghost');
+          if (_invulnerable <= 0 && (g.pos - pos).distance < 0.4) {
+            if (!_spring(g.pos)) _lose('lose.ghost');
             break;
           }
           // Tired ghosts drift off to sleep once the ball is far away.
@@ -2508,9 +2557,9 @@ class GameController extends ChangeNotifier {
         // The boulder crashes down the moment it becomes armed.
         if (!wasArmed && h.armed) {
           bursts.add(Burst(h.pos, 1));
-          if ((h.pos - pos).distance < h.radius + 0.1) _lose('lose.rock');
+          if ((h.pos - pos).distance < boulderReach) _lose('lose.rock');
         }
-      } else if (h.armed && (h.pos - pos).distance < h.radius) {
+      } else if (h.armed && (h.pos - pos).distance < h.radius && !_overTraps) {
         _lose(config.world == WorldKind.graveyard ? 'lose.grave' : 'lose.trap');
       } else if (h.armed &&
           !h.dodged &&
@@ -2530,8 +2579,9 @@ class GameController extends ChangeNotifier {
       if (bombs && bonusLeft > 0) return;
       _spawnTimer -= dt;
       if (_spawnTimer <= 0) {
-        _spawnTimer = config.trapInterval *
-            (config.world == WorldKind.mountains ? 1.2 : bombs ? 1.3 : 1.0);
+        _spawnTimer = config.world == WorldKind.mountains
+            ? config.boulderInterval
+            : config.trapInterval * (bombs ? 1.3 : 1.0);
         for (var i = 0; i < (bombs ? config.bombCount : config.trapCount); i++) {
           _spawnHazard(i);
         }
@@ -2636,16 +2686,36 @@ class GameController extends ChangeNotifier {
 
   void _updateFactory(double dt) {
     _factoryClock += dt;
+    final rubber = mimicking == BallKind.rubber;
     for (final p in presses) {
-      if (pressPhase(p) == 2 && _inZone(p.center, p.along, 0.3 + ballRadius * 0.3, 0.6)) {
+      final halfAlong = 0.3 + ballRadius * 0.3;
+      if (pressPhase(p) == 2 && _inZone(p.center, p.along, halfAlong, 0.6)) {
+        if (rubber) {
+          // Rubber squeezes out from under the press, along the corridor.
+          final d = pos - p.center;
+          final a = d.dx * p.along.dx + d.dy * p.along.dy;
+          final side = a >= 0 ? 1.0 : -1.0;
+          pos += p.along * (side * (halfAlong + 0.02) - a);
+          vel = p.along * (side * _maxSpeed * ball.maxSpeed);
+          continue;
+        }
         _lose('lose.press');
         return;
       }
     }
-    // A wrecking ball knocks the ball back to the start.
+    // A wrecking ball knocks the ball back to the start, and rubber away.
     if (_invulnerable <= 0) {
       for (final p in pendulums) {
-        if ((pendulumBobAt(p) - pos).distance < pendulumBob + ballRadius * 0.6) {
+        final bob = pendulumBobAt(p);
+        if ((bob - pos).distance < pendulumBob + ballRadius * 0.6) {
+          if (rubber) {
+            final away = pos - bob;
+            final d = away.distance;
+            vel = (d < 1e-6 ? const Offset(1, 0) : away / d) * (_maxSpeed * ball.maxSpeed);
+            _invulnerable = 0.5;
+            bursts.add(Burst(pos, 3));
+            return;
+          }
           _sendBack('notice.pendulum');
           return;
         }
@@ -2970,7 +3040,7 @@ class GameController extends ChangeNotifier {
       }
       return;
     }
-    final sight = blizzardLeft > 0 ? yetiBlindSight : yetiSight;
+    final sight = (blizzardLeft > 0 ? yetiBlindSight : yetiSight) * sightScale;
     final sees = _invulnerable <= 0 &&
         (y.pos - pos).distance < sight &&
         _lineClear(y.pos, pos);
@@ -3000,7 +3070,9 @@ class GameController extends ChangeNotifier {
     }
     if (y.mode == 0) _wander(y, dt, base * yetiPatrol);
     if (y.mode == 2 && !sees) switchTo(0);
-    if ((y.pos - pos).distance < yetiCatch) _lose('lose.yeti');
+    if (_invulnerable <= 0 && (y.pos - pos).distance < yetiCatch && !_spring(y.pos)) {
+      _lose('lose.yeti');
+    }
   }
 
   /// The whistle: the yeti nearest the ball runs for the cave closest by way
@@ -3143,8 +3215,10 @@ class GameController extends ChangeNotifier {
       if (j.path.isEmpty) _planPatrol(j);
       if (j.path.length > 1) _swim(j, dt);
       if (_invulnerable > 0 || status != GameStatus.playing) continue;
+      // A bubble drifts over the jellyfish (not over the gummy bears).
+      if (config.world == WorldKind.ocean && ball.floats) continue;
       if ((j.pos - pos).distance < jellyReach && _lineClear(j.pos, pos)) {
-        caughtByJelly();
+        if (!_spring(j.pos)) caughtByJelly();
         return;
       }
     }
@@ -3155,16 +3229,32 @@ class GameController extends ChangeNotifier {
   void _planPatrol(Jellyfish j) {
     final from = maze.cellAt(j.home);
     final targets = [for (var c = 0; c < maze.cellCount; c++) c]..shuffle(_rnd);
+    final others = [
+      for (final o in jellies)
+        if (!identical(o, j)) ...(o.path.isEmpty ? [o.home] : o.path),
+    ];
+    bool apart(List<int> cells) => cells.every((c) {
+          final p = maze.cellCenter(c);
+          return others.every((o) => (o - p).distance >= patrolGap);
+        });
     List<int>? best;
+    List<int>? crowded;
     for (final c in targets) {
       final p = maze.path(from, c, gateOpen);
       if (p == null) continue;
       if (p.length >= 5 && p.length <= 9) {
-        best = p;
-        break;
+        if (apart(p)) {
+          best = p;
+          break;
+        }
+        crowded ??= p;
+        continue;
       }
       if (best == null || p.length > best.length) best = p.length <= 9 ? p : best;
     }
+    // No patrol keeps clear of the others: a crowded one of the right length
+    // is still better than a short one.
+    if (best == null || best.length < 5) best = crowded ?? best;
     if (best == null || best.length < 2) {
       j.path
         ..clear()
@@ -3203,6 +3293,42 @@ class GameController extends ChangeNotifier {
     // Brighter as the end of the patrol comes near.
     final last = j.dir > 0 ? j.path.last : j.path.first;
     j.glow = (1 - (last - j.pos).distance / 1.2).clamp(0.0, 1.0);
+  }
+
+  /// Points every [step] along where [j] will be over the next [seconds]: on
+  /// along its patrol, turning back at the ends after its pause. The ball
+  /// sees this as a line of dots in front of it.
+  List<Offset> jellyAhead(Jellyfish j, {double seconds = jellyLookAhead, double step = 0.3}) {
+    final dots = <Offset>[];
+    if (j.path.length < 2) return dots;
+    var left = (seconds - j.pause) * config.jellySpeed;
+    var at = j.at;
+    var dir = j.dir;
+    var from = j.pos;
+    var carry = step;
+    while (left > 1e-6) {
+      final to = j.path[at];
+      final d = to - from;
+      final len = min(d.distance, left);
+      var k = carry;
+      while (k <= len) {
+        dots.add(from + d / d.distance * k);
+        k += step;
+      }
+      carry = k - len;
+      left -= len;
+      if (left <= 1e-6) break;
+      from = to;
+      final next = at + dir;
+      if (next < 0 || next >= j.path.length) {
+        dir = -dir;
+        left -= jellyPause * config.jellySpeed;
+        at += dir;
+      } else {
+        at = next;
+      }
+    }
+    return dots;
   }
 
   /// A jellyfish stung the ball: back to the start, gates stay open.
@@ -3264,7 +3390,8 @@ class GameController extends ChangeNotifier {
       _beamTimer = config.beamInterval * (0.7 + 0.6 * _rnd.nextDouble());
       _spawnBeam();
     }
-    if (shielded) return;
+    // The beams pass straight through a glass ball.
+    if (shielded || mimicking == BallKind.glass) return;
     for (final b in beams) {
       if (!b.burning) continue;
       final d = b.b - b.a;
@@ -3309,7 +3436,7 @@ class GameController extends ChangeNotifier {
   bool droneSees(Creature d) {
     final v = pos - d.pos;
     final dist = v.distance;
-    if (dist > droneRange) return false;
+    if (dist > droneSight) return false;
     var diff = (v.direction - d.viewAngle) % kTwoPi;
     if (diff > pi) diff -= kTwoPi;
     if (diff.abs() > droneHalfAngle) return false;
@@ -3383,26 +3510,73 @@ class GameController extends ChangeNotifier {
         : minBoulderDistance + _rnd.nextDouble() * 1.2;
     // Later boulders of a wave land a little off to the side.
     final spread = i == 0 ? 0.0 : (_rnd.nextDouble() - 0.5) * 1.6;
+    final volcano = config.world == WorldKind.volcano;
     Offset? target;
     for (var k = 0; k < 8 && target == null; k++) {
       // Try the preferred direction first, then turn away step by step.
       final turn = k == 0 ? 0.0 : (k.isOdd ? 1 : -1) * ((k + 1) ~/ 2) * pi / 4;
       var cand = pos + polar(lead, base + spread + turn);
       cand = maze.clampInside(cand);
+      if (!volcano) cand = _againstWall(cand, boulderRadius);
+      if ((cand - pos).distance >= minBoulderDistance) target = cand;
+    }
+    // Cornered: anywhere around the ball, a little farther out.
+    for (var k = 0; k < 16 && target == null && !volcano; k++) {
+      final cand = _againstWall(
+          maze.clampInside(pos + polar(minBoulderDistance + 0.6, base + pi + k * pi / 8)),
+          boulderRadius);
       if ((cand - pos).distance >= minBoulderDistance) target = cand;
     }
     lead = minBoulderDistance;
-    target ??= pos + polar(lead, base + pi); // cornered: drop it behind
+    target ??= pos + polar(lead, base + pi); // still cornered: drop it behind
     // A volcanic bomb always lands in a corridor, in the middle of a cell.
-    if (config.world == WorldKind.volcano) {
+    if (volcano) {
       target = maze.cellCenter(maze.cellAt(target));
     }
     hazards.add(Hazard(
       target,
       armAt: warn,
-      life: warn + (config.world == WorldKind.volcano ? bombFireSeconds : rubbleSeconds),
-      radius: 0.85,
+      life: warn + (volcano ? bombFireSeconds : rubbleSeconds),
+      radius: volcano ? 0.85 : boulderRadius,
     ));
+  }
+
+  /// [p] moved to lean against the nearest standing wall, so a round thing
+  /// of radius [r] there just touches it (and, in a corner, overlaps none).
+  Offset _againstWall(Offset p, double r) {
+    final touch = PolarMaze.wallHalf + r;
+    final walls = [
+      for (final s in maze.segmentsNear(p))
+        if (s.gate < 0 || !gateOpen[s.gate]) s,
+    ];
+    Offset nearestOn(Seg s, Offset x) {
+      final ab = s.b - s.a;
+      final len2 = ab.distanceSquared;
+      if (len2 < 1e-9) return s.a;
+      final ax = x - s.a;
+      return s.a + ab * ((ax.dx * ab.dx + ax.dy * ab.dy) / len2).clamp(0.0, 1.0);
+    }
+
+    Offset? best;
+    var bestDist = double.infinity;
+    for (final s in walls) {
+      final q = nearestOn(s, p);
+      final d = (p - q).distance;
+      if (d < bestDist) {
+        bestDist = d;
+        best = q;
+      }
+    }
+    if (best == null || bestDist < 1e-6) return p;
+    var out = best + (p - best) / bestDist * touch;
+    for (var pass = 0; pass < 3; pass++) {
+      for (final s in walls) {
+        final q = nearestOn(s, out);
+        final d = (out - q).distance;
+        if (d > 1e-6 && d < touch) out = q + (out - q) / d * touch;
+      }
+    }
+    return out;
   }
 
   /// Spikes pop up in the corridor ahead on the route to the next goal (a

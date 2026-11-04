@@ -162,16 +162,6 @@ class AdService {
   /// Between levels: only when [AdGate] says so, and never for VIPs.
   static Future<void> interstitialIfDue(BuildContext context) async {
     if (Vip.instance.on || !AdGate.instance.due) return;
-    await _interstitialNow(context);
-  }
-
-  /// An interstitial every time, whatever the gate says (VIPs still skip it).
-  static Future<void> interstitialAlways(BuildContext context) async {
-    if (Vip.instance.on) return;
-    await _interstitialNow(context);
-  }
-
-  static Future<void> _interstitialNow(BuildContext context) async {
     if (!live) {
       AdGate.instance.shown();
       await _show(context, rewarded: false);

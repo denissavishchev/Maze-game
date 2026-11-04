@@ -319,7 +319,7 @@ String hazardNote(GameConfig c) {
   final n = c.trapCount;
   final k = c.chaserCount;
   final trapEvery = c.trapInterval.toStringAsFixed(1);
-  final boulderEvery = (c.trapInterval * 1.2).toStringAsFixed(1);
+  final boulderEvery = c.boulderInterval.toStringAsFixed(1);
   return switch (c.world) {
     WorldKind.forest => k == 1 ? tr('note.wolf.one') : tr('note.wolf.many', {'n': k}),
     WorldKind.underground => tr('note.light', {'x': c.lightRadius.toStringAsFixed(1)}),
